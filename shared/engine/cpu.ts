@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { Card, Rank, Suit } from './card'
-import { rankValue, RANKS, SUITS } from './card'
+import { rankValue, SUITS } from './card'
 import type { GameState } from './game-state'
 import { getPlayerById } from './game-state'
 import { evaluateHand, beats } from './hand-eval'

@@ -30,16 +30,6 @@ function makeCpuGame(humanHand: Card[], cpuHand: Card[]): GameState {
   return s
 }
 
-/** Advance past the human's turn so it is the CPU's turn. */
-function advanceToCpuTurn(state: GameState): GameState {
-  // Human discards nothing, then plays the first card
-  const humanId = 'human'
-  let s = applyCommand(state, { type: 'DISCARD', playerId: humanId, cards: [] })
-  const humanPlayer = s.players.find(p => p.id === humanId)!
-  s = applyCommand(s, { type: 'PLAY', playerId: humanId, cards: [humanPlayer.hand[0]] })
-  return s
-}
-
 // ============================================================
 // allValidHands
 // ============================================================
