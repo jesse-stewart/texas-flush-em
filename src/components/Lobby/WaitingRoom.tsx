@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ClientGameState } from '@shared/engine/state-machine'
 
 interface WaitingRoomProps {
@@ -14,6 +14,23 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLe
   const canStart = state.players.length >= 2
   const canAddCpu = state.players.length < 4
   const [copied, setCopied] = useState(false)
+  const [pendingCpu, setPendingCpu] = useState(false)
+
+  // Reset pending state once the server confirms (player count changes) or after a safety timeout
+  useEffect(() => {
+    setPendingCpu(false)
+  }, [state.players.length])
+
+  useEffect(() => {
+    if (!pendingCpu) return
+    const timer = setTimeout(() => setPendingCpu(false), 5000)
+    return () => clearTimeout(timer)
+  }, [pendingCpu])
+
+  function handleAddCpu() {
+    setPendingCpu(true)
+    onAddCpu()
+  }
 
   function copyCode() {
     navigator.clipboard.writeText(roomId)
@@ -71,11 +88,11 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLe
         )}
 
         <button
-          style={{ ...styles.addCpuBtn, opacity: canAddCpu ? 1 : 0.4 }}
-          onClick={onAddCpu}
-          disabled={!canAddCpu}
+          style={{ ...styles.addCpuBtn, opacity: canAddCpu && !pendingCpu ? 1 : 0.4 }}
+          onClick={handleAddCpu}
+          disabled={!canAddCpu || pendingCpu}
         >
-          🤖 Add CPU player
+          {pendingCpu ? '🤖 Adding…' : '🤖 Add CPU player'}
         </button>
 
         <button
