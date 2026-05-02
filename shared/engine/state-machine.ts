@@ -11,6 +11,8 @@ import type { GameState, PlayerState, HandPlay } from './game-state'
 
 export type GameCommand =
   | { type: 'ADD_PLAYER'; playerId: string; playerName: string }
+  | { type: 'ADD_BOT'; playerId: string; playerName: string }
+  | { type: 'REMOVE_BOT'; playerId: string }
   | { type: 'START_GAME'; deckCount?: number }
   | { type: 'NEXT_ROUND' }
   | { type: 'DISCARD'; playerId: string; cards: Card[] }
@@ -33,6 +35,7 @@ export interface PlayerView {
   folded: boolean
   isConnected: boolean
   eliminated: boolean
+  isBot: boolean
 }
 
 export interface ClientGameState {
@@ -66,6 +69,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
       folded: p.folded,
       isConnected: p.connected,
       eliminated: p.eliminated,
+      isBot: p.isBot,
     })),
     myHand: me?.hand ?? [],
     myDeckSize: me?.deck.length ?? 0,
@@ -115,7 +119,9 @@ export function initialState(): GameState {
 
 export function applyCommand(state: GameState, cmd: GameCommand): GameState {
   switch (cmd.type) {
-    case 'ADD_PLAYER':  return applyAddPlayer(state, cmd)
+    case 'ADD_PLAYER':  return applyAddPlayer(state, cmd, false)
+    case 'ADD_BOT':     return applyAddPlayer(state, cmd, true)
+    case 'REMOVE_BOT':  return applyRemoveBot(state, cmd)
     case 'START_GAME':  return applyStartGame(state, cmd)
     case 'NEXT_ROUND':  return applyNextRound(state)
     case 'DISCARD':     return applyDiscard(state, cmd)
@@ -243,11 +249,13 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
 function applyAddPlayer(
   state: GameState,
   cmd: { playerId: string; playerName: string },
+  isBot: boolean,
 ): GameState {
   if (state.phase !== 'lobby') return state
   if (state.players.length >= 4) return state
   if (state.players.some(p => p.id === cmd.playerId)) {
-    // Already joined — mark as reconnected
+    // Already joined — mark as reconnected (humans only; bots are always connected)
+    if (isBot) return state
     return updatePlayer(state, {
       ...state.players.find(p => p.id === cmd.playerId)!,
       connected: true,
@@ -262,12 +270,24 @@ function applyAddPlayer(
     folded: false,
     connected: true,
     eliminated: false,
+    isBot,
   }
 
   return {
     ...state,
     players: [...state.players, newPlayer],
     scores: { ...state.scores, [cmd.playerId]: 0 },
+  }
+}
+
+function applyRemoveBot(state: GameState, cmd: { playerId: string }): GameState {
+  if (state.phase !== 'lobby') return state
+  const target = state.players.find(p => p.id === cmd.playerId)
+  if (!target || !target.isBot) return state
+  return {
+    ...state,
+    players: state.players.filter(p => p.id !== cmd.playerId),
+    scores: Object.fromEntries(Object.entries(state.scores).filter(([id]) => id !== cmd.playerId)),
   }
 }
 
@@ -544,12 +564,12 @@ function applyLeave(state: GameState, cmd: { playerId: string }): GameState {
 
 function applyReconnect(state: GameState, cmd: { playerId: string }): GameState {
   const player = state.players.find(p => p.id === cmd.playerId)
-  if (!player) return state
+  if (!player || player.isBot) return state
   return updatePlayer(state, { ...player, connected: true })
 }
 
 function applyDisconnect(state: GameState, cmd: { playerId: string }): GameState {
   const player = state.players.find(p => p.id === cmd.playerId)
-  if (!player) return state
+  if (!player || player.isBot) return state
   return updatePlayer(state, { ...player, connected: false })
 }

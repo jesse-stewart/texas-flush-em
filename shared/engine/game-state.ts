@@ -14,6 +14,7 @@ export interface PlayerState {
   folded: boolean    // folded during the current hand
   connected: boolean
   eliminated: boolean // reached 52+ cumulative points or left the game
+  isBot: boolean     // server-controlled CPU player; no real WebSocket connection
 }
 
 export interface GameState {

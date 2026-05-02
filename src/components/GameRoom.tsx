@@ -85,6 +85,8 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
           myPlayerId={playerId}
           onStart={() => send({ type: 'START_GAME' })}
           onLeave={onLeave}
+          onAddBot={() => send({ type: 'ADD_BOT' })}
+          onRemoveBot={(id) => send({ type: 'REMOVE_BOT', playerId: id })}
         />
       )
     } else if (state.phase === 'playing') {

@@ -7,10 +7,13 @@ interface WaitingRoomProps {
   myPlayerId: string
   onStart: () => void
   onLeave: () => void
+  onAddBot: () => void
+  onRemoveBot: (playerId: string) => void
 }
 
-export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave }: WaitingRoomProps) {
+export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot }: WaitingRoomProps) {
   const canStart = state.players.length >= 2
+  const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
 
   function copyCode() {
@@ -52,13 +55,31 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave }: Wai
               <span style={styles.playerName}>
                 {p.name}
                 {p.id === myPlayerId && <span style={styles.youTag}> (you)</span>}
+                {p.isBot && <span style={styles.botTag}>CPU</span>}
               </span>
+              {p.isBot && (
+                <button
+                  style={styles.kickBtn}
+                  onClick={() => onRemoveBot(p.id)}
+                  aria-label={`Remove ${p.name}`}
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))}
           {Array.from({ length: 4 - state.players.length }).map((_, i) => (
-            <li key={`empty-${i}`} style={{ ...styles.playerRow, opacity: 0.35 }}>
-              <span style={{ ...styles.dot(false) }} />
-              <span style={styles.playerName}>Waiting for player…</span>
+            <li key={`empty-${i}`} style={styles.playerRow}>
+              {i === 0 && canAddBot ? (
+                <button style={styles.addBotBtn} onClick={onAddBot}>
+                  + Add CPU player
+                </button>
+              ) : (
+                <>
+                  <span style={{ ...styles.dot(false), opacity: 0.35 }} />
+                  <span style={{ ...styles.playerName, opacity: 0.35 }}>Waiting for player…</span>
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -187,6 +208,41 @@ const styles = {
     fontSize: 13,
     color: '#6b7280',
     fontWeight: 400,
+  } as React.CSSProperties,
+  botTag: {
+    marginLeft: 8,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    backgroundColor: '#ede9fe',
+    color: '#6d28d9',
+    padding: '2px 6px',
+    borderRadius: 4,
+  } as React.CSSProperties,
+  kickBtn: {
+    marginLeft: 'auto',
+    width: 22,
+    height: 22,
+    fontSize: 16,
+    lineHeight: 1,
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    borderRadius: 4,
+    padding: 0,
+  } as React.CSSProperties,
+  addBotBtn: {
+    flex: 1,
+    padding: '6px 10px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#6d28d9',
+    backgroundColor: 'transparent',
+    border: '1px dashed #c4b5fd',
+    borderRadius: 6,
+    cursor: 'pointer',
+    textAlign: 'left' as const,
   } as React.CSSProperties,
   hint: {
     fontSize: 13,

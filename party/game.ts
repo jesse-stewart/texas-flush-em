@@ -7,9 +7,15 @@ import type * as Party from 'partykit/server'
 import type { GameAction, GameEvent } from '../src/transport/types'
 import { applyCommand, buildClientState, initialState } from '../shared/engine/state-machine'
 import type { GameState } from '../shared/engine/game-state'
+import { chooseBotMove } from '../shared/engine/bot-ismcts'
+
+const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
+const BOT_TIME_BUDGET_MS = 1200    // ISMCTS wall-clock cap per decision
 
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
+  private botTimer: ReturnType<typeof setTimeout> | null = null
+  private botSeq = 0  // bumped on every state mutation; cancels stale bot work
 
   constructor(readonly room: Party.Room) {}
 
@@ -39,6 +45,19 @@ export default class GameParty implements Party.Server {
           playerId: sender.id,
           playerName: action.playerName,
         })
+        break
+
+      case 'ADD_BOT': {
+        const botId = `bot-${Math.random().toString(36).slice(2, 8)}`
+        const usedNames = new Set(this.state.players.map(p => p.name))
+        const presets = ['CPU Alice', 'CPU Bob', 'CPU Carol', 'CPU Dave']
+        const name = presets.find(n => !usedNames.has(n)) ?? `CPU ${this.state.players.length + 1}`
+        this.state = applyCommand(this.state, { type: 'ADD_BOT', playerId: botId, playerName: name })
+        break
+      }
+
+      case 'REMOVE_BOT':
+        this.state = applyCommand(this.state, { type: 'REMOVE_BOT', playerId: action.playerId })
         break
 
       case 'START_GAME':
@@ -105,6 +124,13 @@ export default class GameParty implements Party.Server {
 
   // Send individualized state to every connected player (each sees only their own hand)
   private broadcastState() {
+    // Bump the sequence so any in-flight bot timer for a stale state is dropped.
+    this.botSeq++
+    if (this.botTimer) {
+      clearTimeout(this.botTimer)
+      this.botTimer = null
+    }
+
     for (const conn of this.room.getConnections()) {
       this.sendTo(conn, { type: 'GAME_STATE', state: buildClientState(this.state, conn.id) })
     }
@@ -117,7 +143,44 @@ export default class GameParty implements Party.Server {
           conn.close(1000, 'Game over')
         }
       }, 30_000)
+      return
     }
+
+    this.scheduleBotTurnIfNeeded()
+  }
+
+  private scheduleBotTurnIfNeeded() {
+    if (this.state.phase !== 'playing') return
+    const currentId = this.state.playerOrder[this.state.currentPlayerIndex]
+    const player = this.state.players.find(p => p.id === currentId)
+    if (!player || !player.isBot) return
+
+    const seq = this.botSeq
+    this.botTimer = setTimeout(() => {
+      this.botTimer = null
+      // Drop if state mutated between scheduling and firing
+      if (seq !== this.botSeq) return
+      this.runBotTurn(currentId)
+    }, BOT_THINK_DELAY_MS)
+  }
+
+  private runBotTurn(botId: string) {
+    if (this.state.phase !== 'playing') return
+    if (this.state.playerOrder[this.state.currentPlayerIndex] !== botId) return
+    const player = this.state.players.find(p => p.id === botId)
+    if (!player || !player.isBot) return
+
+    const decision = chooseBotMove(this.state, botId, { timeBudgetMs: BOT_TIME_BUDGET_MS })
+
+    // DISCARD then PLAY/FOLD — the state machine validates each step.
+    this.state = applyCommand(this.state, { type: 'DISCARD', playerId: botId, cards: decision.discard })
+    if (decision.action.type === 'PLAY') {
+      this.state = applyCommand(this.state, { type: 'PLAY', playerId: botId, cards: decision.action.cards })
+    } else {
+      this.state = applyCommand(this.state, { type: 'FOLD', playerId: botId })
+    }
+
+    this.broadcastState()
   }
 
   private sendTo(conn: Party.Connection, event: GameEvent) {
