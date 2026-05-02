@@ -16,10 +16,12 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLe
   const [copied, setCopied] = useState(false)
   const [pendingCpu, setPendingCpu] = useState(false)
 
-  // Reset pending state once the server confirms (player count changes) or after a safety timeout
+  const cpuCount = state.players.filter(p => p.isCpu).length
+
+  // Reset pending state once a CPU is confirmed added, or after a safety timeout
   useEffect(() => {
     setPendingCpu(false)
-  }, [state.players.length])
+  }, [cpuCount])
 
   useEffect(() => {
     if (!pendingCpu) return
