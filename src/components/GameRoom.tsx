@@ -83,6 +83,7 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
           state={state}
           roomId={roomId}
           myPlayerId={playerId}
+          isConnected={isConnected}
           onStart={() => send({ type: 'START_GAME' })}
           onAddCpu={() => send({ type: 'JOIN_CPU' })}
           onLeave={onLeave}

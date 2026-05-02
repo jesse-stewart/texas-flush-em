@@ -5,12 +5,13 @@ interface WaitingRoomProps {
   state: ClientGameState
   roomId: string
   myPlayerId: string
+  isConnected: boolean
   onStart: () => void
   onAddCpu: () => void
   onLeave: () => void
 }
 
-export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLeave }: WaitingRoomProps) {
+export function WaitingRoom({ state, roomId, myPlayerId, isConnected, onStart, onAddCpu, onLeave }: WaitingRoomProps) {
   const canStart = state.players.length >= 2
   const canAddCpu = state.players.length < 4
   const [copied, setCopied] = useState(false)
@@ -18,16 +19,17 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLe
 
   const cpuCount = state.players.filter(p => p.isCpu).length
 
-  // Reset pending state once a CPU is confirmed added, or after a safety timeout
+  // Clear pending once the server confirms the CPU was added.
   useEffect(() => {
     setPendingCpu(false)
   }, [cpuCount])
 
+  // If the connection drops while the action is pending, clear it so the
+  // user can retry once they reconnect (the in-flight message may have been lost).
   useEffect(() => {
     if (!pendingCpu) return
-    const timer = setTimeout(() => setPendingCpu(false), 5000)
-    return () => clearTimeout(timer)
-  }, [pendingCpu])
+    if (!isConnected) setPendingCpu(false)
+  }, [isConnected, pendingCpu])
 
   function handleAddCpu() {
     setPendingCpu(true)
@@ -90,11 +92,11 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLe
         )}
 
         <button
-          style={{ ...styles.addCpuBtn, opacity: canAddCpu && !pendingCpu ? 1 : 0.4 }}
+          style={{ ...styles.addCpuBtn, opacity: canAddCpu && isConnected && !pendingCpu ? 1 : 0.4 }}
           onClick={handleAddCpu}
-          disabled={!canAddCpu || pendingCpu}
+          disabled={!canAddCpu || !isConnected || pendingCpu}
         >
-          {pendingCpu ? '🤖 Adding…' : '🤖 Add CPU player'}
+          {!isConnected ? '⏳ Connecting…' : pendingCpu ? '🤖 Adding…' : '🤖 Add CPU player'}
         </button>
 
         <button
