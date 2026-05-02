@@ -15,6 +15,7 @@ const CPU_THINK_MS = 600
 
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
+  private cpuTurnTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(readonly room: Party.Room) {}
 
@@ -144,15 +145,23 @@ export default class GameParty implements Party.Server {
   }
 
   // If the current player is a CPU, schedule their turn after a short delay.
+  // Cancels any previously scheduled CPU turn before scheduling a new one.
   private scheduleCpuTurnIfNeeded() {
+    if (this.cpuTurnTimer !== null) {
+      clearTimeout(this.cpuTurnTimer)
+      this.cpuTurnTimer = null
+    }
     if (this.state.phase !== 'playing') return
     const current = getCurrentPlayer(this.state)
     if (!current?.isCpu) return
 
-    setTimeout(() => this.runCpuTurn(), CPU_THINK_MS)
+    this.cpuTurnTimer = setTimeout(() => {
+      this.cpuTurnTimer = null
+      this.runCpuTurn()
+    }, CPU_THINK_MS)
   }
 
-  // Execute a full CPU turn (discard phase + play/fold phase) synchronously,
+  // Execute a full CPU turn (discard phase + play/fold phase) in sequence,
   // then broadcast the result and schedule the next CPU turn if needed.
   private runCpuTurn() {
     if (this.state.phase !== 'playing') return

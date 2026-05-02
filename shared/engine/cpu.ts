@@ -112,13 +112,15 @@ export function decideCpuDiscard(state: GameState, playerId: string): Card[] {
 
   function isPartOfStraightDraw(card: Card): boolean {
     const rv = rankValue(card.rank)
-    // Check if there are at least 2 other ranks in hand within a 5-rank window
-    let consecutive = 1
-    for (let offset = -4; offset <= 4; offset++) {
-      if (offset === 0) continue
-      if (rankValuesPresent.has(rv + offset)) consecutive++
+    // Check every 5-rank window that contains this card's rank value
+    for (let windowStart = rv - 4; windowStart <= rv; windowStart++) {
+      let count = 0
+      for (let offset = 0; offset < 5; offset++) {
+        if (rankValuesPresent.has(windowStart + offset)) count++
+      }
+      if (count >= 3) return true
     }
-    return consecutive >= 3
+    return false
   }
 
   function isUseful(card: Card): boolean {
