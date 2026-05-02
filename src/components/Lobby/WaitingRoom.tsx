@@ -6,11 +6,13 @@ interface WaitingRoomProps {
   roomId: string
   myPlayerId: string
   onStart: () => void
+  onAddCpu: () => void
   onLeave: () => void
 }
 
-export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave }: WaitingRoomProps) {
+export function WaitingRoom({ state, roomId, myPlayerId, onStart, onAddCpu, onLeave }: WaitingRoomProps) {
   const canStart = state.players.length >= 2
+  const canAddCpu = state.players.length < 4
   const [copied, setCopied] = useState(false)
 
   function copyCode() {
@@ -52,6 +54,7 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave }: Wai
               <span style={styles.playerName}>
                 {p.name}
                 {p.id === myPlayerId && <span style={styles.youTag}> (you)</span>}
+                {p.isCpu && <span style={styles.cpuTag}> 🤖</span>}
               </span>
             </li>
           ))}
@@ -66,6 +69,14 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave }: Wai
         {!canStart && (
           <p style={styles.hint}>Need at least 2 players to start.</p>
         )}
+
+        <button
+          style={{ ...styles.addCpuBtn, opacity: canAddCpu ? 1 : 0.4 }}
+          onClick={onAddCpu}
+          disabled={!canAddCpu}
+        >
+          🤖 Add CPU player
+        </button>
 
         <button
           style={{ ...styles.startBtn, opacity: canStart ? 1 : 0.4 }}
@@ -188,6 +199,11 @@ const styles = {
     color: '#6b7280',
     fontWeight: 400,
   } as React.CSSProperties,
+  cpuTag: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: 400,
+  } as React.CSSProperties,
   hint: {
     fontSize: 13,
     color: '#6b7280',
@@ -204,6 +220,18 @@ const styles = {
     backgroundColor: '#16a34a',
     color: '#fff',
     cursor: 'pointer',
+  } as React.CSSProperties,
+  addCpuBtn: {
+    width: '100%',
+    padding: '10px',
+    fontSize: 14,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: '1px solid #d1d5db',
+    backgroundColor: '#f9fafb',
+    color: '#374151',
+    cursor: 'pointer',
+    marginBottom: 8,
   } as React.CSSProperties,
   leaveBtn: {
     width: '100%',
