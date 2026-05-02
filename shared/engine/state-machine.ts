@@ -11,6 +11,7 @@ import type { GameState, PlayerState, HandPlay } from './game-state'
 
 export type GameCommand =
   | { type: 'ADD_PLAYER'; playerId: string; playerName: string }
+  | { type: 'ADD_CPU_PLAYER'; playerId: string; playerName: string }
   | { type: 'START_GAME'; deckCount?: number }
   | { type: 'NEXT_ROUND' }
   | { type: 'DISCARD'; playerId: string; cards: Card[] }
@@ -33,6 +34,7 @@ export interface PlayerView {
   folded: boolean
   isConnected: boolean
   eliminated: boolean
+  isCpu: boolean
 }
 
 export interface ClientGameState {
@@ -66,6 +68,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
       folded: p.folded,
       isConnected: p.connected,
       eliminated: p.eliminated,
+      isCpu: p.isCpu,
     })),
     myHand: me?.hand ?? [],
     myDeckSize: me?.deck.length ?? 0,
@@ -115,7 +118,8 @@ export function initialState(): GameState {
 
 export function applyCommand(state: GameState, cmd: GameCommand): GameState {
   switch (cmd.type) {
-    case 'ADD_PLAYER':  return applyAddPlayer(state, cmd)
+    case 'ADD_PLAYER':      return applyAddPlayer(state, cmd)
+    case 'ADD_CPU_PLAYER':  return applyAddPlayer(state, { ...cmd, isCpu: true })
     case 'START_GAME':  return applyStartGame(state, cmd)
     case 'NEXT_ROUND':  return applyNextRound(state)
     case 'DISCARD':     return applyDiscard(state, cmd)
@@ -242,7 +246,7 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
 
 function applyAddPlayer(
   state: GameState,
-  cmd: { playerId: string; playerName: string },
+  cmd: { playerId: string; playerName: string; isCpu?: boolean },
 ): GameState {
   if (state.phase !== 'lobby') return state
   if (state.players.length >= 4) return state
@@ -262,6 +266,7 @@ function applyAddPlayer(
     folded: false,
     connected: true,
     eliminated: false,
+    isCpu: cmd.isCpu ?? false,
   }
 
   return {

@@ -12,6 +12,7 @@ export interface PlayerPresence {
 // Actions sent from client → server
 export type GameAction =
   | { type: 'JOIN'; playerName: string }
+  | { type: 'JOIN_CPU' }
   | { type: 'START_GAME' }
   | { type: 'NEXT_ROUND' }
   | { type: 'DISCARD'; cards: Card[] }

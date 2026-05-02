@@ -7,6 +7,11 @@ import type * as Party from 'partykit/server'
 import type { GameAction, GameEvent } from '../src/transport/types'
 import { applyCommand, buildClientState, initialState } from '../shared/engine/state-machine'
 import type { GameState } from '../shared/engine/game-state'
+import { getCurrentPlayer } from '../shared/engine/game-state'
+import { decideCpuDiscard, decideCpuPlay } from '../shared/engine/cpu'
+
+// Delay in ms before the CPU acts (makes it feel natural in the UI)
+const CPU_THINK_MS = 600
 
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
@@ -40,6 +45,19 @@ export default class GameParty implements Party.Server {
           playerName: action.playerName,
         })
         break
+
+      case 'JOIN_CPU': {
+        // Assign a stable CPU slot ID based on how many CPUs already exist
+        const cpuCount = this.state.players.filter(p => p.isCpu).length
+        const cpuId = `cpu-${cpuCount + 1}`
+        const cpuName = `CPU ${cpuCount + 1}`
+        this.state = applyCommand(this.state, {
+          type: 'ADD_CPU_PLAYER',
+          playerId: cpuId,
+          playerName: cpuName,
+        })
+        break
+      }
 
       case 'START_GAME':
         this.state = applyCommand(this.state, { type: 'START_GAME' })
@@ -96,6 +114,7 @@ export default class GameParty implements Party.Server {
     }
 
     this.broadcastState()
+    this.scheduleCpuTurnIfNeeded()
   }
 
   onClose(conn: Party.Connection) {
@@ -122,5 +141,43 @@ export default class GameParty implements Party.Server {
 
   private sendTo(conn: Party.Connection, event: GameEvent) {
     conn.send(JSON.stringify(event))
+  }
+
+  // If the current player is a CPU, schedule their turn after a short delay.
+  private scheduleCpuTurnIfNeeded() {
+    if (this.state.phase !== 'playing') return
+    const current = getCurrentPlayer(this.state)
+    if (!current?.isCpu) return
+
+    setTimeout(() => this.runCpuTurn(), CPU_THINK_MS)
+  }
+
+  // Execute a full CPU turn (discard phase + play/fold phase) synchronously,
+  // then broadcast the result and schedule the next CPU turn if needed.
+  private runCpuTurn() {
+    if (this.state.phase !== 'playing') return
+    const current = getCurrentPlayer(this.state)
+    if (!current?.isCpu) return
+
+    const cpuId = current.id
+
+    // --- Discard phase ---
+    if (this.state.turnPhase === 'discard') {
+      const toDiscard = decideCpuDiscard(this.state, cpuId)
+      this.state = applyCommand(this.state, { type: 'DISCARD', playerId: cpuId, cards: toDiscard })
+    }
+
+    // --- Play phase ---
+    if (this.state.turnPhase === 'play') {
+      const toPlay = decideCpuPlay(this.state, cpuId)
+      if (toPlay) {
+        this.state = applyCommand(this.state, { type: 'PLAY', playerId: cpuId, cards: toPlay })
+      } else {
+        this.state = applyCommand(this.state, { type: 'FOLD', playerId: cpuId })
+      }
+    }
+
+    this.broadcastState()
+    this.scheduleCpuTurnIfNeeded()
   }
 }
