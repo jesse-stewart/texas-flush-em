@@ -11,6 +11,7 @@ import { chooseBotMove } from '../shared/engine/bot-ismcts'
 
 const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
 const BOT_TIME_BUDGET_MS = 1200    // ISMCTS wall-clock cap per decision
+const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
 
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
@@ -19,9 +20,27 @@ export default class GameParty implements Party.Server {
 
   constructor(readonly room: Party.Room) {}
 
+  // Restore persisted state when the room wakes from hibernation.
+  async onStart() {
+    const stored = await this.room.storage.get<GameState>('state')
+    if (stored) this.state = stored
+  }
+
+  // Fires when 24h have passed with no broadcastState() call. Wipes the room
+  // and closes any clients that are still hanging on so memory/storage doesn't leak.
+  async onAlarm() {
+    this.state = initialState()
+    await this.room.storage.deleteAll()
+    for (const conn of this.room.getConnections()) {
+      conn.close(1000, 'Room idle — closed')
+    }
+  }
+
   onConnect(conn: Party.Connection) {
     this.state = applyCommand(this.state, { type: 'RECONNECT', playerId: conn.id })
-    this.sendTo(conn, { type: 'GAME_STATE', state: buildClientState(this.state, conn.id) })
+    // Broadcast (not just send-to-one) so scheduleBotTurnIfNeeded fires —
+    // if a human reconnects mid-bot-turn, the bot resumes instead of stalling.
+    this.broadcastState()
   }
 
   onMessage(message: string, sender: Party.Connection) {
@@ -135,7 +154,9 @@ export default class GameParty implements Party.Server {
       this.sendTo(conn, { type: 'GAME_STATE', state: buildClientState(this.state, conn.id) })
     }
 
+    // Persist after each mutation so the room can rehydrate after hibernation.
     if (this.state.phase === 'game_end' || this.state.phase === 'abandoned') {
+      this.room.storage.deleteAll()
       // Give clients time to receive and display the final state, then close all connections.
       // The room will go dormant on its own once no connections remain.
       setTimeout(() => {
@@ -145,6 +166,10 @@ export default class GameParty implements Party.Server {
       }, 30_000)
       return
     }
+    this.room.storage.put('state', this.state)
+    // Push the idle-cleanup alarm forward; if 24h pass with no further mutations,
+    // onAlarm fires and wipes the room.
+    this.room.storage.setAlarm(Date.now() + IDLE_TTL_MS)
 
     this.scheduleBotTurnIfNeeded()
   }
