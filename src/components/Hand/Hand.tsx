@@ -33,7 +33,7 @@ export function cardKey(card: Card): string {
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 
 function SortableCard({
-  id, card, selected, disabled, faceDown, flip, onToggle, pos, cardCount, overlap,
+  id, card, selected, disabled, faceDown, flip, onToggle, pos, overlap,
 }: {
   id: string
   card: Card
@@ -43,7 +43,6 @@ function SortableCard({
   flip: boolean
   onToggle: () => void
   pos: number
-  cardCount: number
   overlap: number
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -145,7 +144,6 @@ export function Hand({
                 flip={flip}
                 onToggle={() => onToggle(i)}
                 pos={i}
-                cardCount={cards.length}
                 overlap={overlap}
               />
             ))}
