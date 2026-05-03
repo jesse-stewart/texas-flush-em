@@ -8,7 +8,7 @@ function startedTwoPlayer(): GameState {
   let s = initialState()
   s = applyCommand(s, { type: 'ADD_BOT', playerId: 'bot1', playerName: 'Bot 1' })
   s = applyCommand(s, { type: 'ADD_BOT', playerId: 'bot2', playerName: 'Bot 2' })
-  s = applyCommand(s, { type: 'START_GAME', deckCount: 1 })
+  s = applyCommand(s, { type: 'START_GAME' })
   return s
 }
 

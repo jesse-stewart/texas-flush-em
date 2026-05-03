@@ -3,22 +3,23 @@ import type { Card as CardType } from '@shared/engine/card'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
 
-function cardKey(c: CardType) { return `${c.rank}-${c.suit}` }
+interface DiscardingSlot { id: number; card: CardType }
 
 interface PlayerHandProps {
-  cards: CardType[]          // display order (managed by parent)
-  selected: CardType[]
-  onToggle: (card: CardType) => void
+  cards: CardType[]               // display order (managed by parent)
+  ids: string[]                   // stable per-instance IDs; one per `cards` entry
+  selectedIndices: number[]
+  onToggle: (index: number) => void
   onReorder: (newOrder: CardType[]) => void
   onSortByRank: () => void
   onSortBySuit: () => void
   disabled: boolean
   deckSize: number
-  discardingCards: CardType[]
+  discardingCards: DiscardingSlot[]   // FLIP source IDs must match `ids` so motion can animate
 }
 
 export function PlayerHand({
-  cards, selected, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards,
 }: PlayerHandProps) {
   return (
     <div style={styles.container}>
@@ -41,7 +42,8 @@ export function PlayerHand({
         <Hand
           overlap={24}
           cards={cards}
-          selected={selected}
+          ids={ids}
+          selectedIndices={selectedIndices}
           onToggle={onToggle}
           onReorder={onReorder}
           disabled={disabled}
@@ -51,7 +53,7 @@ export function PlayerHand({
   )
 }
 
-function DeckStack({ count, discardingCards }: { count: number; discardingCards: CardType[] }) {
+function DeckStack({ count, discardingCards }: { count: number; discardingCards: DiscardingSlot[] }) {
   const layers = Math.min(count, 6)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, alignSelf: 'flex-end', paddingBottom: 4 }}>
@@ -77,15 +79,16 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
           ))
         )}
 
-        {/* FLIP targets: discarded cards arrive here from hand position */}
-        {discardingCards.map((card, i) => (
+        {/* FLIP targets: discarded cards arrive here from their hand position.
+            layoutId must match the per-instance slot id used by Hand's SortableCard. */}
+        {discardingCards.map((slot, i) => (
           <motion.div
-            key={cardKey(card)}
-            layoutId={cardKey(card)}
+            key={slot.id}
+            layoutId={`slot-${slot.id}`}
             style={{ position: 'absolute', top: 0, left: 0, zIndex: 200 + i }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
-            <Card card={card} />
+            <Card card={slot.card} />
           </motion.div>
         ))}
       </div>

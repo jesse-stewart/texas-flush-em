@@ -83,7 +83,7 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
           state={state}
           roomId={roomId}
           myPlayerId={playerId}
-          onStart={() => send({ type: 'START_GAME' })}
+          onStart={(options) => send({ type: 'START_GAME', options })}
           onLeave={onLeave}
           onAddBot={() => send({ type: 'ADD_BOT' })}
           onRemoveBot={(id) => send({ type: 'REMOVE_BOT', playerId: id })}
@@ -207,8 +207,14 @@ function RoundEndModal({
 function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState; myPlayerId: string; onLeave: () => void }) {
   const winner = state.players.find(p => p.id === state.gameWinnerId)
   const isWinner = state.gameWinnerId === myPlayerId
+  const isChips = state.options.scoringMode === 'chips'
 
-  const sorted = [...state.players].sort((a, b) => (state.scores[a.id] ?? 0) - (state.scores[b.id] ?? 0))
+  // Chips: highest balance first. Points: lowest score first.
+  const sorted = [...state.players].sort((a, b) =>
+    isChips
+      ? (state.scores[b.id] ?? 0) - (state.scores[a.id] ?? 0)
+      : (state.scores[a.id] ?? 0) - (state.scores[b.id] ?? 0)
+  )
 
   return (
     <div style={{ ...loadingStyle, flexDirection: 'column', gap: 20 }}>
@@ -220,7 +226,7 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
         <thead>
           <tr style={{ color: '#6b7280', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <th style={{ textAlign: 'left', paddingRight: 24, paddingBottom: 8, fontWeight: 400 }}></th>
-            <th style={{ paddingBottom: 8, fontWeight: 400 }}>chips</th>
+            <th style={{ paddingBottom: 8, fontWeight: 400 }}>{isChips ? 'chips' : 'points'}</th>
           </tr>
         </thead>
         <tbody>
@@ -234,7 +240,7 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
                   {isGameWinner && <span style={{ marginLeft: 8, fontSize: 11, color: '#6ee7b7' }}>winner</span>}
                 </td>
                 <td style={{ paddingTop: 10, fontWeight: 700, color: isMe ? '#fde68a' : '#d1d5db' }}>
-                  {52 - (state.scores[p.id] ?? 0)}
+                  {state.scores[p.id] ?? 0}
                 </td>
               </tr>
             )
@@ -259,11 +265,15 @@ function RoundEndScreen({
   onLeave: () => void
 }) {
   const winner = state.players.find(p => p.id === state.roundWinnerId)
+  const isChips = state.options.scoringMode === 'chips'
+  const totalLabel = isChips ? 'chips' : 'points'
 
-  // Sort: ascending by total score (lowest penalty first); eliminated players last
+  // Chips: best (most chips) first. Points: best (lowest) first. Eliminated last.
   const sorted = [...state.players].sort((a, b) => {
     if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1
-    return (state.scores[a.id] ?? 0) - (state.scores[b.id] ?? 0)
+    return isChips
+      ? (state.scores[b.id] ?? 0) - (state.scores[a.id] ?? 0)
+      : (state.scores[a.id] ?? 0) - (state.scores[b.id] ?? 0)
   })
 
   return (
@@ -278,27 +288,37 @@ function RoundEndScreen({
             <th style={{ textAlign: 'left', paddingRight: 24, paddingBottom: 8, fontWeight: 400 }}></th>
             <th style={{ paddingRight: 20, paddingBottom: 8, fontWeight: 400 }}>before</th>
             <th style={{ paddingRight: 20, paddingBottom: 8, fontWeight: 400 }}>this round</th>
-            <th style={{ paddingBottom: 8, fontWeight: 400 }}>chips</th>
+            <th style={{ paddingBottom: 8, fontWeight: 400 }}>{totalLabel}</th>
           </tr>
         </thead>
         <tbody>
           {sorted.map(p => {
-            const ptsLost = state.roundScoreDelta[p.id] ?? 0
-            const chipsNow = 52 - (state.scores[p.id] ?? 0)
-            const chipsBefore = chipsNow + ptsLost
+            // Chips: delta is signed (winner positive, losers negative). Points: delta is positive penalty.
+            const delta = state.roundScoreDelta[p.id] ?? 0
+            const total = state.scores[p.id] ?? 0
+            const before = isChips ? total - delta : total - delta
             const isMe = p.id === myPlayerId
             const isRoundWinner = p.id === state.roundWinnerId
+            // Sign + color: chips winner gains (green +N); chips loser loses (red -N); points loser adds (red +N).
+            let deltaText = '—'
+            let deltaColor = '#6b7280'
+            if (isChips) {
+              if (delta > 0) { deltaText = `+${delta}`; deltaColor = '#6ee7b7' }
+              else if (delta < 0) { deltaText = `${delta}`; deltaColor = '#fca5a5' }
+            } else {
+              if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = '#fca5a5' }
+            }
             return (
               <tr key={p.id} style={{ opacity: p.eliminated ? 0.45 : 1 }}>
                 <td style={{ textAlign: 'left', paddingRight: 24, paddingTop: 10, fontWeight: isMe ? 700 : 400, color: isMe ? '#fde68a' : '#d1d5db' }}>
                   {p.name}
                   {p.eliminated && <span style={{ marginLeft: 6, fontSize: 11, color: '#6b7280' }}>out</span>}
                 </td>
-                <td style={{ paddingRight: 20, paddingTop: 10, color: '#6b7280' }}>{chipsBefore}</td>
-                <td style={{ paddingRight: 20, paddingTop: 10, color: isRoundWinner ? '#6ee7b7' : '#fca5a5', fontWeight: 600 }}>
-                  {isRoundWinner ? '—' : `-${ptsLost}`}
+                <td style={{ paddingRight: 20, paddingTop: 10, color: '#6b7280' }}>{before}</td>
+                <td style={{ paddingRight: 20, paddingTop: 10, color: deltaColor, fontWeight: 600 }}>
+                  {deltaText}
                 </td>
-                <td style={{ paddingTop: 10, fontWeight: 700, color: isMe ? '#fde68a' : '#d1d5db' }}>{chipsNow}</td>
+                <td style={{ paddingTop: 10, fontWeight: 700, color: isMe ? '#fde68a' : '#d1d5db' }}>{total}</td>
               </tr>
             )
           })}
@@ -307,7 +327,7 @@ function RoundEndScreen({
 
       {isEliminated && (
         <p style={{ color: '#fca5a5', fontWeight: 600, margin: 0, fontSize: 15 }}>
-          You've been eliminated — 52 points reached.
+          You've been eliminated — {isChips ? 'out of chips' : `${state.options.threshold} points reached`}.
         </p>
       )}
 

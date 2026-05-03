@@ -80,7 +80,7 @@ export default class GameParty implements Party.Server {
         break
 
       case 'START_GAME':
-        this.state = applyCommand(this.state, { type: 'START_GAME' })
+        this.state = applyCommand(this.state, { type: 'START_GAME', options: action.options })
         break
 
       case 'NEXT_ROUND':

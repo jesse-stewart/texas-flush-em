@@ -5,13 +5,21 @@
 ## Players and Equipment
 
 - 2 to 4 players
-- One standard 52-card deck (no jokers)
+- At least one standard 52-card deck (no jokers); see *Deal Modes* below for variants using more
 - Optional: chips or stakes for gambling play
+
+## Deal Modes
+
+Before play begins, agree on how cards reach each player. The digital version exposes these as a setting; for tabletop play, just decide together.
+
+- **Classic (default).** One 52-card deck, shuffled and dealt round-robin one card at a time. With remainders (e.g. 3 players → 51 ÷ 3 = 17 each + 1 extra), the extra goes to the player(s) at the start of the deal rotation. Each player ends up with roughly `52 / playerCount` cards. Multi-deck hand categories (flush pair, five of a kind, etc.) are impossible because no duplicates exist.
+- **Personal.** Each player uses their own private deck (52 cards, or fewer by agreement — e.g. 30 each for a faster game). They shuffle and draw from their own deck only. Multi-deck hand categories are still impossible because no single player ever holds duplicates of the same card.
+- **Mixed.** Two, three, or four 52-card decks shuffled together into one shared pool, then each player is dealt an agreed number of cards from the top (e.g. 4 decks, 2 players, 26 cards each → 52 cards dealt, 156 set aside unused). Duplicate cards across the table make the multi-deck hand categories (flush pair, flush full house, five of a kind, etc.) possible. See *Variant: Multiple Mixed Decks* below for the expanded play list.
 
 ## Setup
 
-1. Choose a dealer for the first round (any method — high card draw, youngest player, etc.). The dealer shuffles the deck.
-2. Starting with the player to the dealer's left and proceeding clockwise, deal the entire deck out one card at a time. With 3 players, the player to the dealer's left receives the extra card.
+1. Choose a dealer for the first round (any method — high card draw, youngest player, etc.). The dealer shuffles the deck(s).
+2. Deal according to the chosen Deal Mode (above).
 3. Each player keeps their dealt cards face-down as their personal **deck**.
 4. Each player draws the top 10 cards from their deck.
 
@@ -78,13 +86,18 @@ The round ends when one player empties their cards. That player wins the round.
 
 ## Scoring
 
-Each non-winning player scores points equal to the number of cards remaining in their **hand** (not their deck), capped at 10 points. Lower score is better. The winner scores 0.
+After each round, each non-winning player counts the cards remaining in their **hand** (not their deck), capped at 10. The winner counts 0. Use one of the two scoring modes below.
 
-## Gambling Variant
+### Points Mode (default)
 
-Before play, agree on a stake of $X per card. At the end of each round, each non-winning player pays the winner $X for every card remaining in their hand (not their deck).
+Each non-winning player adds their card count to a running cumulative score. Lower is better. Choose a target score before play (typical: 26):
 
-The game ends when only one player has chips/money left. That player wins the game.
+- **Eliminate at target.** A player who reaches the target is out; play continues with the rest until one remains. That last player wins the game.
+- **End game at target.** As soon as anyone reaches the target, the game ends. The player with the **lowest** cumulative score wins; the highest loses.
+
+### Chips Mode (gambling variant)
+
+Each player starts with an agreed pile of chips (typical: 13). After each round, each non-winning player pays one chip per card remaining in their hand (capped at 10), and the round winner takes the pot. Game ends when only one player has chips left.
 
 ## Next Round
 
@@ -100,7 +113,10 @@ The player to the dealer's left receives the extra 53rd card. Them's the shits.
 
 ## Setup Change
 
-Shuffle 2, 3, or 4 standard decks together as a single combined deck. Deal one card at a time clockwise starting with the player to the dealer's left until all cards are dealt. Any leftover cards land with the player(s) at the start of the deal rotation.
+Shuffle 2, 3, or 4 standard decks together as a single combined deck. Then either:
+
+- **Deal everything** — one card at a time clockwise until exhausted; leftovers go to the player(s) at the start of the deal rotation. Each player ends up with `(decks × 52) / playerCount` cards (rounded with remainders to early seats).
+- **Deal a portion** — agree on cards-per-player (e.g. 26 each with 4 decks and 2 players). Deal that many to each player from the top of the shuffled pool; set the remaining cards aside, unused for the round.
 
 All other rules are unchanged.
 
@@ -141,9 +157,9 @@ For five of a kind, rank alone decides — suits are mixed, so there is no suit 
 
 ## Setup Change
 
-Each player brings their own standard 52-card deck. **Use decks with visibly different backs** (different colors, designs, or brands) so cards can be sorted back to their owners at the end of the round.
+Each player brings their own standard 52-card deck — or, by agreement, a smaller subset (e.g. 30 cards each) for a shorter game. **Use decks with visibly different backs** (different colors, designs, or brands) so cards can be sorted back to their owners at the end of the round.
 
-Each player shuffles their own deck and draws the top 10 cards. There is no initial dealing — every player starts with a full 52-card personal deck.
+Each player shuffles their own deck and draws the top 10 cards. There is no initial dealing — every player starts with their full personal deck.
 
 For the first round, choose a starting player by any method (high card draw, youngest player, etc.). For all subsequent rounds, the player to the left of the previous round's winner goes first. Play proceeds clockwise.
 
@@ -159,4 +175,4 @@ When a hand ends and cards in the middle are set aside (or at the end of the rou
 
 ## Why This Is the Variant
 
-Each player has a 52-card deck instead of ~13-26 cards. Shedding all of them takes a while. The discard-to-bottom mechanic matters less because you'll rarely cycle through your full deck. Bring snacks.
+Each player has a 52-card deck (or close to it) instead of ~13-26 cards. Shedding all of them takes a while. The discard-to-bottom mechanic matters less because you'll rarely cycle through your full deck. Bring snacks. Pick a smaller deck size if you want a shorter session.

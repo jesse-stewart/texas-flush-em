@@ -1,9 +1,41 @@
 import type { Card } from './card'
-import { createMultiDeck, shuffle, dealAll, drawFromTop, insertToBottom } from './deck'
+import { createDeck, createMultiDeck, shuffle, dealAll, drawFromTop, insertToBottom } from './deck'
 import { evaluateHand } from './hand-eval'
 import type { EvaluatedHand } from './hand-eval'
 import { validatePlay, validateDiscard, scoreRound } from './rules'
-import type { GameState, PlayerState, HandPlay } from './game-state'
+import type { GameState, GameOptions, PlayerState, HandPlay } from './game-state'
+import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER } from './game-state'
+
+// ============================================================
+// Dealing — branches by dealMode. Returns one full pile (deck + initial hand) per player.
+// ============================================================
+
+function dealForMode(options: GameOptions, playerCount: number): Card[][] {
+  if (options.dealMode === 'personal') {
+    // Each player has their own independently-shuffled private deck.
+    return Array.from({ length: playerCount }, () =>
+      shuffle(createDeck()).slice(0, options.cardsPerPlayer)
+    )
+  }
+  if (options.dealMode === 'mixed') {
+    // mixedDeckCount × 52 shared pool; each player drawn cardsPerPlayer; leftovers discarded.
+    const pool = shuffle(createMultiDeck(options.mixedDeckCount))
+    const piles: Card[][] = []
+    for (let i = 0; i < playerCount; i++) {
+      piles.push(pool.slice(i * options.cardsPerPlayer, (i + 1) * options.cardsPerPlayer))
+    }
+    return piles
+  }
+  // classic: single 52-card deck dealt round-robin (remainder to early players).
+  return dealAll(shuffle(createDeck()), playerCount)
+}
+
+// "Logical" deck count for the bot's hidden-card reasoning.
+function effectiveDeckCount(options: GameOptions, playerCount: number): number {
+  if (options.dealMode === 'mixed') return options.mixedDeckCount
+  if (options.dealMode === 'personal') return playerCount
+  return 1
+}
 
 // ============================================================
 // Commands — server-side actions (playerId added by the server)
@@ -13,7 +45,7 @@ export type GameCommand =
   | { type: 'ADD_PLAYER'; playerId: string; playerName: string }
   | { type: 'ADD_BOT'; playerId: string; playerName: string }
   | { type: 'REMOVE_BOT'; playerId: string }
-  | { type: 'START_GAME'; deckCount?: number }
+  | { type: 'START_GAME'; options?: Partial<GameOptions> }
   | { type: 'NEXT_ROUND' }
   | { type: 'DISCARD'; playerId: string; cards: Card[] }
   | { type: 'PLAY'; playerId: string; cards: Card[] }
@@ -55,6 +87,7 @@ export interface ClientGameState {
   scores: Record<string, number>
   roundScoreDelta: Record<string, number>
   middlePileCount: number
+  options: GameOptions
 }
 
 export function buildClientState(state: GameState, forPlayerId: string): ClientGameState {
@@ -85,6 +118,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
     roundScoreDelta: state.roundScoreDelta,
     abandonedByName: state.abandonedByName,
     middlePileCount: state.middlePile.length,
+    options: state.options,
   }
 }
 
@@ -109,6 +143,7 @@ export function initialState(): GameState {
     scores: {},
     roundScoreDelta: {},
     deckCount: 1,
+    options: { ...DEFAULT_OPTIONS },
     abandonedByName: null,
   }
 }
@@ -200,27 +235,78 @@ function endHand(
   }
 }
 
-const ELIMINATION_SCORE = 52
-
 function endRound(state: GameState, players: PlayerState[], winnerId: string): GameState {
-  // scoreRound returns penalty points added this round (0 for winner, cards-in-hand for losers)
-  const delta = scoreRound(state, winnerId)
+  // Raw per-loser amount: cards remaining in hand, capped at 10. Winner = 0.
+  // Already-eliminated players contribute 0 (they aren't playing).
+  const lossPerPlayer = scoreRound(state, winnerId)
+  const { scoringMode, threshold, pointsThresholdAction } = state.options
+
+  // delta: signed change applied to scores this round (semantics differ by mode).
+  const delta: Record<string, number> = {}
   const scores: Record<string, number> = { ...state.scores }
-  for (const [id, pts] of Object.entries(delta)) {
-    scores[id] = (scores[id] ?? 0) + pts
+
+  if (scoringMode === 'chips') {
+    // Losers pay chips equal to their card count; winner takes the pot.
+    let pot = 0
+    for (const [id, amt] of Object.entries(lossPerPlayer)) {
+      if (id === winnerId) continue
+      const player = players.find(p => p.id === id)
+      // Already-eliminated players don't lose chips; cap loss at the player's current balance
+      // so chips never go negative.
+      const lost = player && !player.eliminated ? Math.min(amt, scores[id] ?? 0) : 0
+      delta[id] = -lost
+      scores[id] = (scores[id] ?? 0) - lost
+      pot += lost
+    }
+    delta[winnerId] = pot
+    scores[winnerId] = (scores[winnerId] ?? 0) + pot
+  } else {
+    // Points mode: penalty points accumulate for losers; winner is unchanged.
+    for (const [id, amt] of Object.entries(lossPerPlayer)) {
+      const isWinner = id === winnerId
+      const pts = isWinner ? 0 : amt
+      delta[id] = pts
+      scores[id] = (scores[id] ?? 0) + pts
+    }
   }
 
-  // Eliminate players who hit the threshold
-  const updatedPlayers = players.map(p =>
-    !p.eliminated && (scores[p.id] ?? 0) >= ELIMINATION_SCORE
-      ? { ...p, eliminated: true }
-      : p
-  )
+  // Apply elimination per mode.
+  // Chips: a player with 0 chips is out. Points + eliminate: a player at/over threshold is out.
+  // Points + end_game: nobody is eliminated mid-game; the whole game ends when threshold is hit.
+  let updatedPlayers = players
+  if (scoringMode === 'chips') {
+    updatedPlayers = players.map(p =>
+      !p.eliminated && (scores[p.id] ?? 0) <= 0 ? { ...p, eliminated: true } : p
+    )
+  } else if (pointsThresholdAction === 'eliminate') {
+    updatedPlayers = players.map(p =>
+      !p.eliminated && (scores[p.id] ?? 0) >= threshold ? { ...p, eliminated: true } : p
+    )
+  }
 
-  // Game ends when ≤1 non-eliminated player remains
+  const thresholdHitInEndGameMode =
+    scoringMode === 'points' &&
+    pointsThresholdAction === 'end_game' &&
+    Object.values(scores).some(s => s >= threshold)
+
+  // Game-end conditions:
+  //  - chips / points-eliminate: ≤1 non-eliminated player remains
+  //  - points-end_game: any player hit the threshold this round
   const remaining = updatedPlayers.filter(p => !p.eliminated)
-  if (remaining.length <= 1) {
-    const gameWinnerId = remaining[0]?.id ?? null
+  if (remaining.length <= 1 || thresholdHitInEndGameMode) {
+    // Pick a game winner.
+    // Single-survivor cases: that's the winner.
+    // points-end_game: lowest cumulative score wins (ties broken by player order).
+    let gameWinnerId: string | null
+    if (thresholdHitInEndGameMode) {
+      const candidates = updatedPlayers.filter(p => !p.eliminated)
+      gameWinnerId = candidates.reduce<PlayerState | null>((best, p) => {
+        if (!best) return p
+        return (scores[p.id] ?? 0) < (scores[best.id] ?? 0) ? p : best
+      }, null)?.id ?? null
+    } else {
+      gameWinnerId = remaining[0]?.id ?? null
+    }
     return {
       ...state,
       players: updatedPlayers,
@@ -291,21 +377,29 @@ function applyRemoveBot(state: GameState, cmd: { playerId: string }): GameState 
   }
 }
 
-function applyStartGame(state: GameState, cmd: { deckCount?: number }): GameState {
+function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> }): GameState {
   if (state.phase !== 'lobby') return state
   if (state.players.length < 2) return state
 
-  const deckCount = cmd.deckCount ?? 1
-  const rawDeck = shuffle(createMultiDeck(deckCount))
-  const dealtHands = dealAll(rawDeck, state.players.length)
+  const merged: GameOptions = { ...DEFAULT_OPTIONS, ...(cmd.options ?? {}) }
+  // Defense in depth: the lobby UI clamps these, but a malformed action shouldn't be able to
+  // start a game where the initial draw-to-10 can't be satisfied.
+  const options: GameOptions = {
+    ...merged,
+    cardsPerPlayer: Math.max(MIN_CARDS_PER_PLAYER, merged.cardsPerPlayer),
+  }
+  const piles = dealForMode(options, state.players.length)
 
   const players = state.players.map((p, i) => {
-    const dealt = dealtHands[i]
-    const { drawn, remaining } = drawFromTop(dealt, 10)
+    const { drawn, remaining } = drawFromTop(piles[i], 10)
     return { ...p, deck: remaining, hand: drawn, folded: false }
   })
 
   const playerOrder = players.map(p => p.id)
+  // Chips mode starts each player with `threshold` chips; points mode starts at 0.
+  const initialScore = options.scoringMode === 'chips' ? options.threshold : 0
+  const scores: Record<string, number> = {}
+  for (const p of players) scores[p.id] = initialScore
 
   return {
     ...state,
@@ -320,7 +414,10 @@ function applyStartGame(state: GameState, cmd: { deckCount?: number }): GameStat
     currentHandPlays: [],
     middlePile: [],
     roundWinnerId: null,
-    deckCount,
+    scores,
+    roundScoreDelta: {},
+    deckCount: effectiveDeckCount(options, players.length),
+    options,
   }
 }
 
@@ -329,11 +426,10 @@ function applyNextRound(state: GameState): GameState {
 
   // Only non-eliminated players participate in the next round
   const activePlayers = state.players.filter(p => !p.eliminated)
-  const rawDeck = shuffle(createMultiDeck(state.deckCount))
-  const dealtHands = dealAll(rawDeck, activePlayers.length)
+  const piles = dealForMode(state.options, activePlayers.length)
 
   const updatedActive = activePlayers.map((p, i) => {
-    const { drawn, remaining } = drawFromTop(dealtHands[i], 10)
+    const { drawn, remaining } = drawFromTop(piles[i], 10)
     return { ...p, deck: remaining, hand: drawn, folded: false }
   })
 
@@ -361,6 +457,8 @@ function applyNextRound(state: GameState): GameState {
     currentHandPlays: [],
     middlePile: [],
     roundWinnerId: null,
+    // Personal mode's effective deck count tracks playerCount, which can shrink after eliminations.
+    deckCount: effectiveDeckCount(state.options, activePlayers.length),
   }
 }
 

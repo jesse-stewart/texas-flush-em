@@ -20,8 +20,15 @@ function withTwoPlayers(): GameState {
   return addPlayers(initialState(), { id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' })
 }
 
-function startedGame(deckCount = 1): GameState {
-  return applyCommand(withTwoPlayers(), { type: 'START_GAME', deckCount })
+// `decks` parameter: 1 = classic single deck (default); 2-4 = mixed multi-deck pool
+function startedGame(decks = 1): GameState {
+  if (decks === 1) {
+    return applyCommand(withTwoPlayers(), { type: 'START_GAME' })
+  }
+  return applyCommand(withTwoPlayers(), {
+    type: 'START_GAME',
+    options: { dealMode: 'mixed', mixedDeckCount: decks, cardsPerPlayer: Math.floor(decks * 52 / 2) },
+  })
 }
 
 // Skip discard phase by discarding zero cards (pass empty array)
@@ -130,11 +137,37 @@ describe('START_GAME', () => {
     expect(s2.players).toEqual(s.players) // unchanged
   })
 
-  it('uses deckCount for multi-deck games', () => {
-    const s = startedGame(2)
+  it('mixed mode with full pool: each player gets cardsPerPlayer cards', () => {
+    const s = startedGame(2)  // mixed, 2 decks, 52 cards each → 104 total dealt
     expect(s.deckCount).toBe(2)
     const total = s.players.reduce((sum, p) => sum + p.hand.length + p.deck.length, 0)
     expect(total).toBe(104) // 2 decks × 52
+  })
+
+  it('mixed mode with partial pool: leftovers discarded', () => {
+    const s = applyCommand(withTwoPlayers(), {
+      type: 'START_GAME',
+      options: { dealMode: 'mixed', mixedDeckCount: 4, cardsPerPlayer: 26 },
+    })
+    expect(s.deckCount).toBe(4)
+    const total = s.players.reduce((sum, p) => sum + p.hand.length + p.deck.length, 0)
+    expect(total).toBe(52) // 2 players × 26; 156 cards from the 4-deck pool unused
+    for (const p of s.players) expect(p.hand.length + p.deck.length).toBe(26)
+  })
+
+  it('personal mode: each player gets cardsPerPlayer from a private deck', () => {
+    const s = applyCommand(withTwoPlayers(), {
+      type: 'START_GAME',
+      options: { dealMode: 'personal', cardsPerPlayer: 30 },
+    })
+    expect(s.deckCount).toBe(2) // playerCount, for bot's hidden-card reasoning
+    for (const p of s.players) expect(p.hand.length + p.deck.length).toBe(30)
+    // Each player's pile has no internal duplicates (drawn from their own 52-card deck)
+    for (const p of s.players) {
+      const allCards = [...p.hand, ...p.deck]
+      const seen = new Set(allCards.map(c => `${c.rank}|${c.suit}`))
+      expect(seen.size).toBe(allCards.length)
+    }
   })
 })
 

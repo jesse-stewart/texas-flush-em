@@ -1,4 +1,5 @@
 import type { Card } from '@shared/engine/card'
+import type { GameOptions } from '@shared/engine/game-state'
 
 // Re-exported from the shared engine so the client and server use identical types
 export type { ClientGameState, PlayerView } from '@shared/engine/state-machine'
@@ -14,7 +15,7 @@ export type GameAction =
   | { type: 'JOIN'; playerName: string }
   | { type: 'ADD_BOT' }
   | { type: 'REMOVE_BOT'; playerId: string }
-  | { type: 'START_GAME' }
+  | { type: 'START_GAME'; options?: Partial<GameOptions> }
   | { type: 'NEXT_ROUND' }
   | { type: 'DISCARD'; cards: Card[] }
   | { type: 'PLAY'; cards: Card[] }

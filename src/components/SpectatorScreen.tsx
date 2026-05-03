@@ -21,7 +21,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
 
       <OpponentArea opponents={state.players} currentPlayerId={state.currentPlayerId} presence={presence} />
 
-      <TableCenter state={state} myPlayerId="" />
+      <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />
 
       <div style={styles.footer}>
         <span style={styles.footerText}>{eliminated ? "You've been eliminated — watching the rest of the game" : 'Game in progress — you joined late'}</span>

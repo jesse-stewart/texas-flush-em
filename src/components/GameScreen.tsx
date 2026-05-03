@@ -23,50 +23,75 @@ interface GameScreenProps {
 
 function cardKey(c: Card) { return `${c.rank}-${c.suit}` }
 
+// Stable per-instance slot for a card in the player's hand. The id disambiguates
+// duplicates in mixed-deck mode (two 4♥ from different decks need separate identities).
+interface HandSlot { id: number; card: Card }
+
 export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave }: GameScreenProps) {
-  const [selected, setSelected] = useState<Card[]>([])
+  const [selected, setSelected] = useState<number[]>([])  // slot ids
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [cardOrder, setCardOrder] = useState<Card[]>(state.myHand)
-  // Cards currently animating from hand to deck (targets rendered inside DeckStack)
-  const [discardingCards, setDiscardingCards] = useState<Card[]>([])
+  const [cardOrder, setCardOrder] = useState<HandSlot[]>([])
+  // Slots currently animating from hand → deck (FLIP targets share layoutId with the source)
+  const [discardingCards, setDiscardingCards] = useState<HandSlot[]>([])
+  // Slot IDs of the cards in my most recent PLAY, in the order I played them. Lets TableCenter
+  // use the same layoutIds as Hand so the cards FLIP-animate from my hand to the table.
+  // Cleared when the current hand resets (new lead → currentHandPlays goes back to 0).
+  const [myLastPlaySlotIds, setMyLastPlaySlotIds] = useState<number[] | null>(null)
 
-  // Stable slot IDs: each card gets an integer ID when it first enters the hand.
-  // These IDs let opponents animate our face-down cards reordering via Framer Motion.
-  const slotIds = useRef(new Map<string, number>())
-  const nextSlot = useRef(0)
+  const nextSlotId = useRef(0)
 
-  // Sync cardOrder when hand changes (cards played/drawn/discarded).
-  // Preserve existing order; append new cards at the end.
+  // Sync cardOrder with state.myHand. Use multiset matching so duplicates keep distinct ids.
   useEffect(() => {
     setCardOrder(prev => {
-      const handKeys = new Set(state.myHand.map(cardKey))
-      const kept = prev.filter(c => handKeys.has(cardKey(c)))
-      const keptKeys = new Set(kept.map(cardKey))
-      const added = state.myHand.filter(c => !keptKeys.has(cardKey(c)))
+      const incoming = new Map<string, number>()
+      for (const c of state.myHand) incoming.set(cardKey(c), (incoming.get(cardKey(c)) ?? 0) + 1)
+
+      // Keep slots whose card is still represented in the hand
+      const kept: HandSlot[] = []
+      for (const slot of prev) {
+        const k = cardKey(slot.card)
+        const remaining = incoming.get(k) ?? 0
+        if (remaining > 0) {
+          kept.push(slot)
+          incoming.set(k, remaining - 1)
+        }
+      }
+      // Add slots for cards that weren't matched to existing slots
+      const added: HandSlot[] = []
+      for (const c of state.myHand) {
+        const k = cardKey(c)
+        const remaining = incoming.get(k) ?? 0
+        if (remaining > 0) {
+          added.push({ id: nextSlotId.current++, card: c })
+          incoming.set(k, remaining - 1)
+        }
+      }
       return [...kept, ...added]
     })
   }, [state.myHand])
+
+  // Drop selections that point at slots no longer in the hand
+  useEffect(() => {
+    const validIds = new Set(cardOrder.map(s => s.id))
+    setSelected(prev => prev.filter(id => validIds.has(id)))
+  }, [cardOrder])
 
   // Clear selection when it's no longer our turn or phase advances
   useEffect(() => {
     setSelected([])
   }, [state.currentPlayerId, state.turnPhase])
 
-  // Broadcast presence (selection + hand order) to opponents whenever either changes.
+  // Drop stale FLIP-source slot IDs once the current hand resets (new lead).
   useEffect(() => {
-    // Assign stable slot IDs to any new cards; remove IDs for cards no longer in hand
-    const currentKeys = new Set(cardOrder.map(cardKey))
-    for (const key of slotIds.current.keys()) {
-      if (!currentKeys.has(key)) slotIds.current.delete(key)
-    }
-    for (const card of cardOrder) {
-      const key = cardKey(card)
-      if (!slotIds.current.has(key)) slotIds.current.set(key, nextSlot.current++)
-    }
+    if (state.currentHandPlays.length === 0) setMyLastPlaySlotIds(null)
+  }, [state.currentHandPlays.length])
 
-    const handOrder = cardOrder.map(card => slotIds.current.get(cardKey(card))!)
-    const selectedPositions = selected
-      .map(card => cardOrder.findIndex(c => cardKey(c) === cardKey(card)))
+  // Broadcast presence (slot order + selected positions) to opponents whenever either changes.
+  useEffect(() => {
+    const handOrder = cardOrder.map(s => s.id)
+    const selectedSet = new Set(selected)
+    const selectedPositions = cardOrder
+      .map((s, i) => selectedSet.has(s.id) ? i : -1)
       .filter(i => i >= 0)
 
     // Cast needed until TS language server picks up the updated GameAction union
@@ -75,30 +100,62 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
 
   const opponents = state.players.filter(p => p.id !== myPlayerId)
 
-  function toggleCard(card: Card) {
+  // Derived views
+  const cards = cardOrder.map(s => s.card)
+  const ids = cardOrder.map(s => `slot-${s.id}`)
+  const selectedSet = new Set(selected)
+  const selectedIndices = cardOrder
+    .map((s, i) => selectedSet.has(s.id) ? i : -1)
+    .filter(i => i >= 0)
+  const selectedCards = cardOrder.filter(s => selectedSet.has(s.id)).map(s => s.card)
+
+  function toggleCard(index: number) {
+    const slot = cardOrder[index]
+    if (!slot) return
     setSelected(prev => {
-      const idx = prev.findIndex(c => cardKey(c) === cardKey(card))
-      if (idx >= 0) return prev.filter((_, i) => i !== idx)
+      const at = prev.indexOf(slot.id)
+      if (at >= 0) return prev.filter((_, i) => i !== at)
       if (prev.length >= 5) return prev
-      return [...prev, card]
+      return [...prev, slot.id]
+    })
+  }
+
+  function handleReorder(newCards: Card[]) {
+    // Hand returns the cards in new order; map them back to slots, preserving ids.
+    setCardOrder(prev => {
+      const remaining = [...prev]
+      const out: HandSlot[] = []
+      for (const c of newCards) {
+        const k = cardKey(c)
+        const idx = remaining.findIndex(s => cardKey(s.card) === k)
+        if (idx >= 0) {
+          out.push(remaining[idx])
+          remaining.splice(idx, 1)
+        }
+      }
+      // Append any leftover slots (shouldn't happen, but be safe)
+      return [...out, ...remaining]
     })
   }
 
   function handleDiscard() {
-    const toDiscard = selected
-    const toDiscardKeys = new Set(toDiscard.map(cardKey))
+    const toDiscard = cardOrder.filter(s => selectedSet.has(s.id))
+    const discardIds = new Set(toDiscard.map(s => s.id))
     // Same render: remove from hand AND add targets at deck → Framer Motion captures the FLIP
-    setCardOrder(prev => prev.filter(c => !toDiscardKeys.has(cardKey(c))))
+    setCardOrder(prev => prev.filter(s => !discardIds.has(s.id)))
     setDiscardingCards(toDiscard)
     setSelected([])
-    send({ type: 'DISCARD', cards: toDiscard })
+    send({ type: 'DISCARD', cards: toDiscard.map(s => s.card) })
     // Clear targets after animation completes
     setTimeout(() => setDiscardingCards([]), 600)
   }
 
   function handlePlay() {
+    // Capture slot IDs in card order so TableCenter can use them as FLIP source layoutIds.
+    const orderedSlotIds = cardOrder.filter(s => selectedSet.has(s.id)).map(s => s.id)
+    setMyLastPlaySlotIds(orderedSlotIds)
     if (state.turnPhase === 'discard') send({ type: 'DISCARD', cards: [] })
-    send({ type: 'PLAY', cards: selected })
+    send({ type: 'PLAY', cards: selectedCards })
     setSelected([])
   }
 
@@ -110,13 +167,19 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
 
   function sortByRank() {
     setCardOrder(prev =>
-      [...prev].sort((a, b) => rankValue(a.rank) - rankValue(b.rank) || suitValue(a.suit) - suitValue(b.suit))
+      [...prev].sort((a, b) =>
+        rankValue(a.card.rank) - rankValue(b.card.rank) ||
+        suitValue(a.card.suit) - suitValue(b.card.suit)
+      )
     )
   }
 
   function sortBySuit() {
     setCardOrder(prev =>
-      [...prev].sort((a, b) => suitValue(a.suit) - suitValue(b.suit) || rankValue(a.rank) - rankValue(b.rank))
+      [...prev].sort((a, b) =>
+        suitValue(a.card.suit) - suitValue(b.card.suit) ||
+        rankValue(a.card.rank) - rankValue(b.card.rank)
+      )
     )
   }
 
@@ -127,7 +190,8 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         <div style={styles.scores}>
           {state.players.map(p => (
             <span key={p.id} style={{ ...styles.score, color: p.id === myPlayerId ? '#fde68a' : '#9ca3af' }}>
-              {p.name}: {52 - (state.scores[p.id] ?? 0)}
+              {p.name}: {state.scores[p.id] ?? 0}
+              {state.options.scoringMode === 'points' && `/${state.options.threshold}`}
             </span>
           ))}
         </div>
@@ -140,22 +204,23 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       <LayoutGroup>
         <OpponentArea opponents={opponents} currentPlayerId={state.currentPlayerId} presence={presence} />
 
-        <TableCenter state={state} myPlayerId={myPlayerId} />
+        <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
 
         <ActionBar
           state={state}
           myPlayerId={myPlayerId}
-          selected={selected}
+          selected={selectedCards}
           onDiscard={handleDiscard}
           onPlay={handlePlay}
           onFold={handleFold}
         />
 
         <PlayerHand
-          cards={cardOrder}
-          selected={selected}
+          cards={cards}
+          ids={ids}
+          selectedIndices={selectedIndices}
           onToggle={toggleCard}
-          onReorder={setCardOrder}
+          onReorder={handleReorder}
           onSortByRank={sortByRank}
           onSortBySuit={sortBySuit}
           disabled={state.currentPlayerId !== myPlayerId}

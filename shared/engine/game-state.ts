@@ -6,6 +6,45 @@ export interface HandPlay {
   playerId: string
 }
 
+// ============================================================
+// Game options — chosen in the lobby, frozen when the game starts
+// ============================================================
+
+export type ScoringMode = 'points' | 'chips'
+export type PointsThresholdAction = 'eliminate' | 'end_game'
+
+// classic   — single 52-card deck dealt round-robin (remainder to first players)
+// personal  — each player has their own private deck of `cardsPerPlayer` cards
+// mixed     — `mixedDeckCount` 52-card decks shuffled together; each player dealt `cardsPerPlayer`
+export type DealMode = 'classic' | 'personal' | 'mixed'
+
+export interface GameOptions {
+  scoringMode: ScoringMode
+  // Points: target — first player to hit it triggers thresholdAction. Chips: starting chips per player.
+  threshold: number
+  // Points-only: when a player reaches the threshold, eliminate them or end the whole game.
+  pointsThresholdAction: PointsThresholdAction
+  dealMode: DealMode
+  // Personal/Mixed: cards each player starts with. Classic ignores this (uses all 52 / playerCount).
+  cardsPerPlayer: number
+  // Mixed only: how many 52-card decks shuffled together (1–4).
+  mixedDeckCount: number
+}
+
+// Initial draw size — every player must start with at least this many cards or the game can't open.
+export const MIN_CARDS_PER_PLAYER = 10
+export const PERSONAL_MAX_CARDS = 52
+export const MIXED_DEFAULT_CARDS = 26
+
+export const DEFAULT_OPTIONS: GameOptions = {
+  scoringMode: 'points',
+  threshold: 26,
+  pointsThresholdAction: 'eliminate',
+  dealMode: 'classic',
+  cardsPerPlayer: PERSONAL_MAX_CARDS,
+  mixedDeckCount: 2,
+}
+
 export interface PlayerState {
   id: string
   name: string
@@ -31,9 +70,14 @@ export interface GameState {
   middlePile: Card[]                // all cards set aside from completed hands
   roundWinnerId: string | null
   gameWinnerId: string | null       // set when phase === 'game_end'
-  scores: Record<string, number>    // cumulative card-count scores; lower is better
-  roundScoreDelta: Record<string, number> // points added in the most recent round
-  deckCount: number                 // 1–4 standard decks combined
+  // Points mode: cumulative penalty points (lower = better). Chips mode: current chip balance (higher = better).
+  scores: Record<string, number>
+  // Points mode: positive = points added this round. Chips mode: signed — winner positive, losers negative.
+  roundScoreDelta: Record<string, number>
+  // Total decks worth of cards in play (used by the bot for hidden-card reasoning):
+  //   classic = 1, mixed = mixedDeckCount, personal = playerCount (one private deck per player)
+  deckCount: number
+  options: GameOptions              // frozen at START_GAME
 }
 
 export function getCurrentPlayer(state: GameState): PlayerState | undefined {

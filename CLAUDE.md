@@ -57,13 +57,32 @@ Game state lives in `party/game.ts`. Clients send actions, server validates + br
 
 Commands (all validated before applying):
 - `ADD_PLAYER` — lobby only, max 4 players
-- `START_GAME` — deals cards, each player draws top 10
+- `START_GAME` — accepts a `Partial<GameOptions>`; deals according to `dealMode`, each player draws top 10
 - `DISCARD` — up to 5 cards to bottom of own deck, then draws back to 10; if deck empty, skips
 - `PLAY` — validates hand beats current top play, replenishes, checks round/hand end
 - `FOLD` — marks folded, ends hand if ≤1 player remains
 - `RECONNECT` / `DISCONNECT` — marks player connected/disconnected
 
 Turn phases: `discard` → (DISCARD action) → `play` → (PLAY or FOLD) → next player's `discard`
+
+## Game Options (frozen at START_GAME)
+
+Selected in the lobby ([WaitingRoom.tsx](src/components/Lobby/WaitingRoom.tsx)), passed via `START_GAME`, stored on `GameState.options`. Defined in [shared/engine/game-state.ts](shared/engine/game-state.ts).
+
+**Scoring:**
+- `scoringMode: 'points' | 'chips'` — points (default) accumulate as penalties, lower = better. Chips start at `threshold` per player and transfer.
+- `threshold: number` — points target / chips per player (default 26 points / 13 chips, no upper cap).
+- `pointsThresholdAction: 'eliminate' | 'end_game'` — points-only. Eliminate (default) = continue until 1 left; end_game = whole game ends, lowest cumulative wins.
+
+**Dealing:**
+- `dealMode: 'classic' | 'personal' | 'mixed'` — controls how cards reach players.
+  - **classic** (default) — single shuffled 52-card deck dealt round-robin (remainder to early players). `cardsPerPlayer` ignored.
+  - **personal** — each player has their own independently-shuffled private 52-card deck (or `cardsPerPlayer` ≤ 52). Multi-deck hand categories impossible because no player ever holds duplicates.
+  - **mixed** — `mixedDeckCount × 52` cards shuffled into one shared pool; each player dealt `cardsPerPlayer`; leftovers discarded. Multi-deck hand categories become possible due to duplicates.
+- `cardsPerPlayer: number` — Personal: 10–52. Mixed: 10–`floor(mixedDeckCount × 52 / playerCount)` (lobby clamps).
+- `mixedDeckCount: number` — Mixed only, 1–4.
+
+`GameState.deckCount` is now a **derived** "logical decks worth of cards in play" used by the bot's hidden-card reasoning: classic = 1, mixed = `mixedDeckCount`, personal = `playerCount`. It's set in `applyStartGame`/`applyNextRound` via `effectiveDeckCount(...)`.
 
 ## Hand Categories (low → high)
 Single-deck: HIGH_CARD, PAIR, TWO_PAIR, THREE_OF_A_KIND, STRAIGHT, FLUSH, FULL_HOUSE, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH
@@ -103,13 +122,21 @@ Tiebreaking: category → rank → suit (clubs < diamonds < hearts < spades). St
 ## Players and Equipment
 
 - 2 to 4 players
-- One standard 52-card deck (no jokers)
+- At least one standard 52-card deck (no jokers); see *Deal Modes* below for variants using more
 - Optional: chips or stakes for gambling play
+
+## Deal Modes
+
+Before play begins, agree on how cards reach each player. The digital version exposes these as a setting; for tabletop play, just decide together.
+
+- **Classic (default).** One 52-card deck, shuffled and dealt round-robin one card at a time. Remainders go to the player(s) at the start of the deal rotation. Each player ends up with roughly `52 / playerCount` cards. Multi-deck hand categories (flush pair, five of a kind, etc.) are impossible — no duplicates exist.
+- **Personal.** Each player uses their own private deck (52 cards, or fewer by agreement — e.g. 30 each for a faster game). They shuffle and draw from their own deck only. Multi-deck hand categories are still impossible because no single player ever holds duplicates.
+- **Mixed.** Two, three, or four 52-card decks shuffled into one shared pool, then each player is dealt an agreed number of cards from the top (e.g. 4 decks, 2 players, 26 cards each → 52 cards dealt, 156 set aside unused). Duplicates make the multi-deck hand categories possible.
 
 ## Setup
 
-1. Choose a dealer for the first round (any method — high card draw, youngest player, etc.). The dealer shuffles the deck.
-2. Starting with the player to the dealer's left and proceeding clockwise, deal the entire deck out one card at a time. With 3 players, the player to the dealer's left receives the extra card.
+1. Choose a dealer for the first round (any method — high card draw, youngest player, etc.). The dealer shuffles the deck(s).
+2. Deal according to the chosen Deal Mode (above).
 3. Each player keeps their dealt cards face-down as their personal **deck**.
 4. Each player draws the top 10 cards from their deck.
 
@@ -176,13 +203,18 @@ The round ends when one player empties their cards. That player wins the round.
 
 ## Scoring
 
-Each non-winning player scores points equal to the number of cards remaining in their **hand** (not their deck), capped at 10 points. Lower score is better. The winner scores 0.
+After each round, each non-winning player counts the cards remaining in their **hand** (not their deck), capped at 10. The winner counts 0. Use one of the two scoring modes below.
 
-## Gambling Variant
+### Points Mode (default)
 
-Before play, agree on a stake of $X per card. At the end of each round, each non-winning player pays the winner $X for every card remaining in their hand (not their deck).
+Each non-winning player adds their card count to a running cumulative score. Lower is better. Choose a target score before play (typical: 26):
 
-The game ends when only one player has chips/money left. That player wins the game.
+- **Eliminate at target.** A player who reaches the target is out; play continues with the rest until one remains. That last player wins the game.
+- **End game at target.** As soon as anyone reaches the target, the game ends. The player with the **lowest** cumulative score wins; the highest loses.
+
+### Chips Mode (gambling variant)
+
+Each player starts with an agreed pile of chips (typical: 13). After each round, each non-winning player pays one chip per card remaining in their hand (capped at 10), and the round winner takes the pot. Game ends when only one player has chips left.
 
 ## Next Round
 
@@ -198,7 +230,10 @@ The player to the dealer's left receives the extra 53rd card. Them's the shits.
 
 ## Setup Change
 
-Shuffle 2, 3, or 4 standard decks together as a single combined deck. Deal one card at a time clockwise starting with the player to the dealer's left until all cards are dealt. Any leftover cards land with the player(s) at the start of the deal rotation.
+Shuffle 2, 3, or 4 standard decks together as a single combined deck. Then either:
+
+- **Deal everything** — one card at a time clockwise until exhausted; leftovers go to the player(s) at the start of the deal rotation. Each player ends up with `(decks × 52) / playerCount` cards (rounded with remainders to early seats).
+- **Deal a portion** — agree on cards-per-player (e.g. 26 each with 4 decks and 2 players). Deal that many to each player from the top of the shuffled pool; set the remaining cards aside, unused for the round.
 
 All other rules are unchanged.
 
@@ -239,9 +274,9 @@ For five of a kind, rank alone decides — suits are mixed, so there is no suit 
 
 ## Setup Change
 
-Each player brings their own standard 52-card deck. **Use decks with visibly different backs** (different colors, designs, or brands) so cards can be sorted back to their owners at the end of the round.
+Each player brings their own standard 52-card deck — or, by agreement, a smaller subset (e.g. 30 cards each) for a shorter game. **Use decks with visibly different backs** (different colors, designs, or brands) so cards can be sorted back to their owners at the end of the round.
 
-Each player shuffles their own deck and draws the top 10 cards. There is no initial dealing — every player starts with a full 52-card personal deck.
+Each player shuffles their own deck and draws the top 10 cards. There is no initial dealing — every player starts with their full personal deck.
 
 For the first round, choose a starting player by any method (high card draw, youngest player, etc.). For all subsequent rounds, the player to the left of the previous round's winner goes first. Play proceeds clockwise.
 
@@ -257,4 +292,4 @@ When a hand ends and cards in the middle are set aside (or at the end of the rou
 
 ## Why This Is the Variant
 
-Each player has a 52-card deck instead of ~13-26 cards. Shedding all of them takes a while. The discard-to-bottom mechanic matters less because you'll rarely cycle through your full deck. Bring snacks.
+Each player has a 52-card deck (or close to it) instead of ~13-26 cards. Shedding all of them takes a while. The discard-to-bottom mechanic matters less because you'll rarely cycle through your full deck. Bring snacks. Pick a smaller deck size if you want a shorter session.

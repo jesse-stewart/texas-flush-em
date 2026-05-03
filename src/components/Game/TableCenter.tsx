@@ -1,49 +1,58 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
-import type { Card as CardType } from '@shared/engine/card'
 import { HandCategory } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
-
-function cardLayoutId(card: CardType) {
-  return `${card.rank}-${card.suit}`
-}
 
 const CARD_HEIGHT = 112
 const STACK_OFFSET = CARD_HEIGHT * 0.1   // 10% per layer within a stack
 
-function PlayStack({ plays, myPlayerId }: { plays: HandPlay[]; myPlayerId: string }) {
+interface PlayStackProps {
+  plays: HandPlay[]
+  myPlayerId: string
+  // Slot IDs from the player's hand that produced the *most recent* play, in card order.
+  // Used as Framer Motion layoutIds so cards FLIP from hand → table. Duplicates need
+  // distinct ids (same rank+suit can't share a layoutId or only one will animate).
+  myLastPlaySlotIds: number[] | null
+}
+
+function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
   if (plays.length === 0) return null
   const height = (plays.length - 1) * STACK_OFFSET + CARD_HEIGHT
+  const lastIndex = plays.length - 1
   return (
     <div style={{ position: 'relative', height, minWidth: 80 }}>
       <AnimatePresence>
-        {plays.map((play, i) => (
-          <div
-            key={play.hand.cards.map(c => cardLayoutId(c)).join('+')}
-            style={{
-              position: 'absolute',
-              top: i * STACK_OFFSET,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: i + 1,
-              display: 'flex',
-              gap: 6,
-            }}
-          >
-            {play.hand.cards.map((card, j) => (
-              <motion.div
-                key={j}
-                layoutId={play.playerId === myPlayerId ? cardLayoutId(card) : undefined}
-                initial={play.playerId === myPlayerId ? false : { y: -200 }}
-                animate={{ y: 0 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-              >
-                <Card card={card} />
-              </motion.div>
-            ))}
-          </div>
-        ))}
+        {plays.map((play, i) => {
+          // Only the most recent play needs FLIP source layoutIds, and only if it was mine.
+          const useFlip = i === lastIndex && play.playerId === myPlayerId && myLastPlaySlotIds
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: i * STACK_OFFSET,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: i + 1,
+                display: 'flex',
+                gap: 6,
+              }}
+            >
+              {play.hand.cards.map((card, j) => (
+                <motion.div
+                  key={j}
+                  layoutId={useFlip ? `slot-${myLastPlaySlotIds![j]}` : undefined}
+                  initial={useFlip ? false : { y: -200 }}
+                  animate={{ y: 0 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                >
+                  <Card card={card} />
+                </motion.div>
+              ))}
+            </div>
+          )
+        })}
       </AnimatePresence>
     </div>
   )
@@ -71,9 +80,10 @@ const CATEGORY_LABEL: Record<number, string> = {
 interface TableCenterProps {
   state: ClientGameState
   myPlayerId: string
+  myLastPlaySlotIds: number[] | null
 }
 
-export function TableCenter({ state, myPlayerId }: TableCenterProps) {
+export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCenterProps) {
   const currentPlayer = state.players.find(p => p.id === state.currentPlayerId)
   const topPlayer = state.players.find(p => p.id === state.currentTopPlayerId)
   const isMyTurn = state.currentPlayerId === myPlayerId
@@ -107,7 +117,7 @@ export function TableCenter({ state, myPlayerId }: TableCenterProps) {
                 <span style={styles.categoryName}>{CATEGORY_LABEL[state.currentTopPlay!.category]}</span>
                 <span style={styles.playedBy}>by {topPlayer?.name ?? '?'}</span>
               </div>
-              <PlayStack plays={state.currentHandPlays} myPlayerId={myPlayerId} />
+              <PlayStack plays={state.currentHandPlays} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
             </>
           )}
         </div>

@@ -51,11 +51,9 @@ function OpponentSeat({
       ? presence.handOrder
       : Array.from({ length: handCount }, (_, i) => i)
 
-  const selectedSet = new Set(presence?.selectedPositions ?? [])
-
-  // Map slot IDs → unique fake cards; selected positions → selected fake cards
+  // Map slot IDs → unique fake cards; presence carries the selected positions directly
   const fakeCards = handOrder.map((_, i) => FAKE_CARDS[i % 52])
-  const selectedCards = fakeCards.filter((_, i) => selectedSet.has(i))
+  const selectedIndices = presence?.selectedPositions ?? []
 
   return (
     <div style={styles.seat}>
@@ -75,7 +73,7 @@ function OpponentSeat({
             <Hand
               cards={fakeCards}
               ids={handOrder.map(id => `${player.id}-${id}`)}
-              selected={selectedCards}
+              selectedIndices={selectedIndices}
               onToggle={() => {}}
               disabled
               faceDown

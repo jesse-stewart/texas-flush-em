@@ -30,10 +30,6 @@ export function cardKey(card: Card): string {
   return `${card.rank}-${card.suit}`
 }
 
-function cardSelected(card: Card, selected: Card[]): boolean {
-  return selected.some(s => s.rank === card.rank && s.suit === card.suit)
-}
-
 // ─── SortableCard ─────────────────────────────────────────────────────────────
 
 function SortableCard({
@@ -54,7 +50,6 @@ function SortableCard({
   const [hovered, setHovered] = useState(false)
 
   const liftY = selected ? (flip ? 14 : -14) : hovered && !disabled ? (flip ? 8 : -8) : 0
-  const indexOffset = Math.min(pos, cardCount - 1 - pos) * (flip ? -2 : 2);
 
   return (
     <div
@@ -74,7 +69,7 @@ function SortableCard({
       }}
     >
       <div style={{
-        transform: `translateY(${liftY - indexOffset}px) rotateX(${flip ? 180 : 0}deg) rotateZ(${cardCount / 2 * -1 + pos}deg)`,
+        transform: `translateY(${liftY}px) rotateX(${flip ? 180 : 0}deg))`,
         transition: 'transform 0.12s ease',
       }}>
         <motion.div
@@ -97,9 +92,9 @@ function SortableCard({
 
 interface HandProps {
   cards: Card[]
-  ids?: string[]           // optional ID overrides for dnd-kit + React keys
-  selected: Card[]
-  onToggle: (card: Card) => void
+  ids?: string[]                  // dnd-kit + React key IDs (one per card; required for duplicate-card disambiguation)
+  selectedIndices: number[]       // positions in `cards` that are currently selected
+  onToggle: (index: number) => void
   onReorder?: (newOrder: Card[]) => void
   disabled?: boolean
   faceDown?: boolean
@@ -108,25 +103,26 @@ interface HandProps {
 }
 
 export function Hand({
-  cards, ids, selected, onToggle, onReorder, disabled = false, faceDown = false,
+  cards, ids, selectedIndices, onToggle, onReorder, disabled = false, faceDown = false,
   flip = false, overlap = CARD_OVERLAP,
 }: HandProps) {
-  const [activeCard, setActiveCard] = useState<Card | null>(null)
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
 
   const itemIds = cards.map((c, i) => ids?.[i] ?? cardKey(c))
+  const selectedSet = new Set(selectedIndices)
 
   function handleDragStart(e: DragStartEvent) {
     const idx = itemIds.indexOf(e.active.id as string)
-    setActiveCard(idx >= 0 ? cards[idx] : null)
+    setActiveIndex(idx >= 0 ? idx : null)
   }
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e
-    setActiveCard(null)
+    setActiveIndex(null)
     if (!over || active.id === over.id) return
     const from = itemIds.indexOf(active.id as string)
     const to   = itemIds.indexOf(over.id as string)
@@ -143,11 +139,11 @@ export function Hand({
                 key={itemIds[i]}
                 id={itemIds[i]}
                 card={card}
-                selected={cardSelected(card, selected)}
+                selected={selectedSet.has(i)}
                 disabled={disabled}
                 faceDown={faceDown}
                 flip={flip}
-                onToggle={() => onToggle(card)}
+                onToggle={() => onToggle(i)}
                 pos={i}
                 cardCount={cards.length}
                 overlap={overlap}
@@ -161,9 +157,9 @@ export function Hand({
       </SortableContext>
 
       <DragOverlay>
-        {activeCard && (
+        {activeIndex !== null && cards[activeIndex] && (
           <div style={{ opacity: 0.95, cursor: 'grabbing' }}>
-            <CardComponent card={activeCard} faceDown={faceDown} selected={cardSelected(activeCard, selected)} />
+            <CardComponent card={cards[activeIndex]} faceDown={faceDown} selected={selectedSet.has(activeIndex)} />
           </div>
         )}
       </DragOverlay>
