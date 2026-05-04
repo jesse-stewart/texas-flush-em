@@ -65,6 +65,7 @@ function NumberStepper({
 interface WaitingRoomProps {
   state: ClientGameState
   roomId: string
+  password?: string
   myPlayerId: string
   onStart: (options: GameOptions) => void
   onLeave: () => void
@@ -139,7 +140,7 @@ function formatDuration(min: number): string {
   return m === 0 ? `~${h} hr` : `~${h} hr ${m} min`
 }
 
-export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot, onSetBotDifficulty }: WaitingRoomProps) {
+export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot, onSetBotDifficulty }: WaitingRoomProps) {
   const canStart = state.players.length >= 2
   const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
@@ -191,7 +192,8 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAdd
   }
 
   function copyLink() {
-    const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`
+    const base = `${window.location.origin}${window.location.pathname}?room=${roomId}`
+    const url = password ? `${base}&p=${encodeURIComponent(password)}` : base
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -204,6 +206,7 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAdd
 
         <div style={styles.roomRow}>
           <span style={styles.roomLabel}>Room code</span>
+          {password && <span style={styles.lockTag} title="Password protected">🔒</span>}
           <span style={styles.roomCode}>{roomId}</span>
           <button style={styles.copyBtn} onClick={copyCode}>
             Copy
@@ -211,7 +214,7 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAdd
         </div>
 
         <button style={styles.shareLinkBtn} onClick={copyLink}>
-          {copied ? '✓ Link copied!' : 'Copy invite link'}
+          {copied ? '✓ Link copied!' : password ? 'Copy invite link (incl. password)' : 'Copy invite link'}
         </button>
 
         <h2 style={styles.sectionTitle}>
@@ -469,6 +472,10 @@ const styles = {
     letterSpacing: '0.15em',
     color: '#111827',
     fontFamily: 'monospace',
+  } as React.CSSProperties,
+  lockTag: {
+    fontSize: 13,
+    color: '#6b7280',
   } as React.CSSProperties,
   copyBtn: {
     fontSize: 12,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 // ← Swap this import to change transport (Socket.io, etc.) — nothing else changes
 import { createTransport } from '../transport/partykit'
-import type { GameTransport } from '../transport/GameTransport'
+import type { ConnectionError, GameTransport } from '../transport/GameTransport'
 import type { ClientGameState, GameAction } from '../transport/types'
 import { isPresenceEvent } from '../transport/presence'
 import type { PlayerPresence } from '../transport/presence'
@@ -12,20 +12,23 @@ const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST ?? 'localhost:1999'
 interface UseGameOptions {
   roomId: string
   playerId: string
+  password?: string
 }
 
 interface UseGameReturn {
   state: ClientGameState | null
   isConnected: boolean
+  connectionError: ConnectionError | null
   send: (action: GameAction) => void
   presence: Map<string, PlayerPresence>
   debugState: GameState | null
   requestDebugState: () => void
 }
 
-export function useGame({ roomId, playerId }: UseGameOptions): UseGameReturn {
+export function useGame({ roomId, playerId, password }: UseGameOptions): UseGameReturn {
   const [state, setState] = useState<ClientGameState | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const [connectionError, setConnectionError] = useState<ConnectionError | null>(null)
   const [presence, setPresence] = useState<Map<string, PlayerPresence>>(new Map())
   const [debugState, setDebugState] = useState<GameState | null>(null)
   const transportRef = useRef<GameTransport | null>(null)
@@ -48,16 +51,18 @@ export function useGame({ roomId, playerId }: UseGameOptions): UseGameReturn {
     })
     const unsubConnect = transport.onConnect(() => setIsConnected(true))
     const unsubDisconnect = transport.onDisconnect(() => setIsConnected(false))
+    const unsubError = transport.onError((err) => setConnectionError(err))
 
-    transport.connect(roomId, playerId)
+    transport.connect(roomId, playerId, { password })
 
     return () => {
       unsubEvent()
       unsubConnect()
       unsubDisconnect()
+      unsubError()
       transport.disconnect()
     }
-  }, [roomId, playerId])
+  }, [roomId, playerId, password])
 
   const send = (action: GameAction) => {
     transportRef.current?.send(action)
@@ -67,5 +72,5 @@ export function useGame({ roomId, playerId }: UseGameOptions): UseGameReturn {
     transportRef.current?.send({ type: 'DEBUG_FULL_STATE' })
   }
 
-  return { state, isConnected, send, presence, debugState, requestDebugState }
+  return { state, isConnected, connectionError, send, presence, debugState, requestDebugState }
 }

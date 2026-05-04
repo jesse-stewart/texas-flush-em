@@ -13,8 +13,12 @@ import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
 const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
 
+// Connection close codes for client-surfaced auth failures (4xxx range = application-defined).
+const CLOSE_BAD_PASSWORD = 4001
+
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
+  private password: string | null = null  // null = no password required
   private botTimer: ReturnType<typeof setTimeout> | null = null
   private botSeq = 0  // bumped on every state mutation; cancels stale bot work
 
@@ -31,19 +35,36 @@ export default class GameParty implements Party.Server {
         nextRoundReady: stored.nextRoundReady ?? {},
       }
     }
+    this.password = (await this.room.storage.get<string>('password')) ?? null
   }
 
   // Fires when 24h have passed with no broadcastState() call. Wipes the room
   // and closes any clients that are still hanging on so memory/storage doesn't leak.
   async onAlarm() {
     this.state = initialState()
+    this.password = null
     await this.room.storage.deleteAll()
     for (const conn of this.room.getConnections()) {
       conn.close(1000, 'Room idle — closed')
     }
   }
 
-  onConnect(conn: Party.Connection) {
+  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+    // First connection on an empty, never-used room may set a password.
+    // Otherwise the incoming password must match the stored one.
+    const incoming = new URL(ctx.request.url).searchParams.get('p') ?? ''
+    const isFreshRoom = this.password === null && this.state.players.length === 0
+
+    if (isFreshRoom) {
+      if (incoming.length > 0) {
+        this.password = incoming
+        this.room.storage.put('password', incoming)
+      }
+    } else if (this.password !== null && incoming !== this.password) {
+      conn.close(CLOSE_BAD_PASSWORD, 'wrong-password')
+      return
+    }
+
     this.state = applyCommand(this.state, { type: 'RECONNECT', playerId: conn.id })
     // Broadcast (not just send-to-one) so scheduleBotTurnIfNeeded fires —
     // if a human reconnects mid-bot-turn, the bot resumes instead of stalling.
@@ -176,6 +197,7 @@ export default class GameParty implements Party.Server {
 
     // Persist after each mutation so the room can rehydrate after hibernation.
     if (this.state.phase === 'game_end' || this.state.phase === 'abandoned') {
+      this.password = null
       this.room.storage.deleteAll()
       // Give clients time to receive and display the final state, then close all connections.
       // The room will go dormant on its own once no connections remain.

@@ -12,12 +12,21 @@ interface GameRoomProps {
   roomId: string
   playerId: string
   playerName: string
+  password?: string
   spectatorMode?: boolean
   onLeave: () => void
+  onAuthFailed: (reason: string) => void
 }
 
-export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave }: GameRoomProps) {
-  const { state, isConnected, send, presence, debugState, requestDebugState } = useGame({ roomId, playerId })
+export function GameRoom({ roomId, playerId, playerName, password, spectatorMode, onLeave, onAuthFailed }: GameRoomProps) {
+  const { state, isConnected, connectionError, send, presence, debugState, requestDebugState } = useGame({ roomId, playerId, password })
+
+  // Server rejected the connection (4xxx close code) — bubble up so the App
+  // can drop the session and route back to JoinScreen with the error.
+  useEffect(() => {
+    if (connectionError) onAuthFailed(connectionError.reason || 'rejected')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionError])
   const [debugOpen, setDebugOpen] = useState(false)
   const [roundModalDismissed, setRoundModalDismissed] = useState(false)
   const [spectating, setSpectating] = useState(false)
@@ -83,6 +92,7 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
         <WaitingRoom
           state={state}
           roomId={roomId}
+          password={password}
           myPlayerId={playerId}
           onStart={(options) => send({ type: 'START_GAME', options })}
           onLeave={onLeave}

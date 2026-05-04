@@ -5,7 +5,7 @@
 // ============================================================
 
 import PartySocket from 'partysocket'
-import type { GameTransport, TransportOptions } from './GameTransport'
+import type { ConnectionError, GameTransport, TransportOptions } from './GameTransport'
 import type { GameAction, GameEvent } from './types'
 
 export function createTransport(options: TransportOptions): GameTransport {
@@ -13,13 +13,15 @@ export function createTransport(options: TransportOptions): GameTransport {
   const eventHandlers = new Set<(event: GameEvent) => void>()
   const connectHandlers = new Set<() => void>()
   const disconnectHandlers = new Set<() => void>()
+  const errorHandlers = new Set<(err: ConnectionError) => void>()
 
   return {
-    connect(roomId, playerId) {
+    connect(roomId, playerId, opts) {
       socket = new PartySocket({
         host: options.host,
         room: roomId,
         id: playerId,
+        query: opts?.password ? { p: opts.password } : undefined,
       })
 
       socket.addEventListener('message', (e) => {
@@ -31,7 +33,13 @@ export function createTransport(options: TransportOptions): GameTransport {
         connectHandlers.forEach(h => h())
       })
 
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (e) => {
+        // 4xxx codes are server-rejected (auth fail, etc.) — bubble up so the UI
+        // can surface a meaningful error and stop reconnect loops.
+        if (e.code >= 4000 && e.code < 5000) {
+          errorHandlers.forEach(h => h({ code: e.code, reason: e.reason }))
+          socket?.close()
+        }
         disconnectHandlers.forEach(h => h())
       })
     },
@@ -58,6 +66,11 @@ export function createTransport(options: TransportOptions): GameTransport {
     onDisconnect(handler) {
       disconnectHandlers.add(handler)
       return () => disconnectHandlers.delete(handler)
+    },
+
+    onError(handler) {
+      errorHandlers.add(handler)
+      return () => errorHandlers.delete(handler)
     },
   }
 }

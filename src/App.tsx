@@ -6,6 +6,7 @@ interface Session {
   roomId: string
   playerId: string
   playerName: string
+  password?: string
   spectatorMode?: boolean
 }
 
@@ -42,20 +43,34 @@ function getOrCreatePlayerId(existing?: string): string {
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(() => loadSession())
+  // If the URL points to a different room than the saved session, discard the
+  // session so JoinScreen renders with the URL's room pre-filled. Otherwise the
+  // old session would silently "win" and you'd never see the room you opened.
+  const [session, setSession] = useState<Session | null>(() => {
+    const saved = loadSession()
+    const urlRoom = new URLSearchParams(window.location.search).get('room')?.toUpperCase()
+    if (urlRoom && saved && saved.roomId !== urlRoom) {
+      localStorage.removeItem(SESSION_KEY)
+      return null
+    }
+    return saved
+  })
+  const [joinError, setJoinError] = useState<string | null>(null)
 
-  function handleJoin(roomId: string, playerName: string) {
+  function handleJoin(roomId: string, playerName: string, password?: string) {
     const playerId = getOrCreatePlayerId(session?.playerId)
-    const s: Session = { roomId, playerId, playerName }
+    const s: Session = { roomId, playerId, playerName, password }
     saveSession(s)
     saveName(playerName)
+    setJoinError(null)
     setSession(s)
   }
 
-  function handleSpectate(roomId: string) {
+  function handleSpectate(roomId: string, password?: string) {
     const playerId = getOrCreatePlayerId(session?.playerId)
-    const s: Session = { roomId, playerId, playerName: '', spectatorMode: true }
+    const s: Session = { roomId, playerId, playerName: '', password, spectatorMode: true }
     saveSession(s)
+    setJoinError(null)
     setSession(s)
   }
 
@@ -64,9 +79,35 @@ export default function App() {
     setSession(null)
   }
 
+  // Server rejected the connection (wrong password, etc.) — clear session and
+  // bounce back to JoinScreen with the room/name pre-filled and an error shown.
+  function handleAuthFailed(reason: string) {
+    const prev = session
+    localStorage.removeItem(SESSION_KEY)
+    setSession(null)
+    setJoinError(reason === 'wrong-password' ? 'Wrong password for that room.' : `Couldn't join: ${reason}`)
+    // Keep room+name in URL so JoinScreen pre-fills.
+    if (prev) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('room', prev.roomId)
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
+
   if (!session) {
-    const prefilledRoom = new URLSearchParams(window.location.search).get('room') ?? undefined
-    return <JoinScreen onJoin={handleJoin} onSpectate={handleSpectate} prefilledRoom={prefilledRoom} prefilledName={loadName()} />
+    const params = new URLSearchParams(window.location.search)
+    const prefilledRoom = params.get('room') ?? undefined
+    const prefilledPassword = params.get('p') ?? undefined
+    return (
+      <JoinScreen
+        onJoin={handleJoin}
+        onSpectate={handleSpectate}
+        prefilledRoom={prefilledRoom}
+        prefilledName={loadName()}
+        prefilledPassword={prefilledPassword}
+        error={joinError}
+      />
+    )
   }
 
   return (
@@ -74,8 +115,10 @@ export default function App() {
       roomId={session.roomId}
       playerId={session.playerId}
       playerName={session.playerName}
+      password={session.password}
       spectatorMode={session.spectatorMode}
       onLeave={handleLeave}
+      onAuthFailed={handleAuthFailed}
     />
   )
 }

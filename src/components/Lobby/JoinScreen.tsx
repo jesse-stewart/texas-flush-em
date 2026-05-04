@@ -2,36 +2,41 @@ import { useState } from 'react'
 import { RulesModal } from '../RulesModal'
 
 interface JoinScreenProps {
-  onJoin: (roomId: string, playerName: string) => void
-  onSpectate: (roomId: string) => void
+  onJoin: (roomId: string, playerName: string, password?: string) => void
+  onSpectate: (roomId: string, password?: string) => void
   prefilledRoom?: string
   prefilledName?: string
+  prefilledPassword?: string
+  error?: string | null
 }
 
 function randomRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
 }
 
-export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName }: JoinScreenProps) {
+export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, prefilledPassword, error: externalError }: JoinScreenProps) {
   const [name, setName] = useState(prefilledName ?? '')
   const [roomInput, setRoomInput] = useState(prefilledRoom ?? '')
+  const [password, setPassword] = useState(prefilledPassword ?? '')
   const [error, setError] = useState('')
   const [rulesOpen, setRulesOpen] = useState(false)
 
   const hasRoom = roomInput.trim().length > 0
+  const displayError = error || externalError || ''
 
   function handleSubmit() {
     if (!name.trim()) { setError('Enter your name first.'); return }
+    const pw = password.trim() || undefined
     if (hasRoom) {
-      onJoin(roomInput.trim().toUpperCase(), name.trim())
+      onJoin(roomInput.trim().toUpperCase(), name.trim(), pw)
     } else {
-      onJoin(randomRoomId(), name.trim())
+      onJoin(randomRoomId(), name.trim(), pw)
     }
   }
 
   function handleSpectate() {
     if (!hasRoom) { setError('Enter a room code to spectate.'); return }
-    onSpectate(roomInput.trim().toUpperCase())
+    onSpectate(roomInput.trim().toUpperCase(), password.trim() || undefined)
   }
 
   return (
@@ -61,7 +66,20 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName }:
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
         />
 
-        {error && <p style={styles.error}>{error}</p>}
+        <label style={styles.label}>
+          Password <span style={styles.optional}>(optional)</span>
+        </label>
+        <input
+          style={styles.input}
+          type="password"
+          value={password}
+          onChange={e => { setPassword(e.target.value); setError('') }}
+          placeholder={hasRoom ? 'If the room has one' : 'Lock this room'}
+          maxLength={32}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+        />
+
+        {displayError && <p style={styles.error}>{displayError}</p>}
 
         <button style={styles.btn} onClick={handleSubmit}>
           {hasRoom ? 'Join game' : 'Create game'}
@@ -117,6 +135,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#374151',
     marginBottom: 6,
+  },
+  optional: {
+    fontSize: 12,
+    fontWeight: 400,
+    color: '#9ca3af',
   },
   input: {
     padding: '10px 12px',
