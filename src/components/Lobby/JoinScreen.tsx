@@ -5,14 +5,15 @@ interface JoinScreenProps {
   onJoin: (roomId: string, playerName: string) => void
   onSpectate: (roomId: string) => void
   prefilledRoom?: string
+  prefilledName?: string
 }
 
 function randomRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
 }
 
-export function JoinScreen({ onJoin, onSpectate, prefilledRoom }: JoinScreenProps) {
-  const [name, setName] = useState('')
+export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName }: JoinScreenProps) {
+  const [name, setName] = useState(prefilledName ?? '')
   const [roomInput, setRoomInput] = useState(prefilledRoom ?? '')
   const [error, setError] = useState('')
   const [rulesOpen, setRulesOpen] = useState(false)

@@ -10,6 +10,7 @@ interface Session {
 }
 
 const SESSION_KEY = 'flushem_session'
+const NAME_KEY = 'flushem_name'
 
 function loadSession(): Session | null {
   try {
@@ -22,6 +23,16 @@ function loadSession(): Session | null {
 
 function saveSession(session: Session) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+}
+
+// Persist the player's name across sessions so JoinScreen can pre-fill it next visit.
+// Survives leaving a room (which clears the session) so the name input isn't blanked.
+function loadName(): string {
+  return localStorage.getItem(NAME_KEY) ?? ''
+}
+
+function saveName(name: string) {
+  localStorage.setItem(NAME_KEY, name)
 }
 
 function getOrCreatePlayerId(existing?: string): string {
@@ -37,6 +48,7 @@ export default function App() {
     const playerId = getOrCreatePlayerId(session?.playerId)
     const s: Session = { roomId, playerId, playerName }
     saveSession(s)
+    saveName(playerName)
     setSession(s)
   }
 
@@ -54,7 +66,7 @@ export default function App() {
 
   if (!session) {
     const prefilledRoom = new URLSearchParams(window.location.search).get('room') ?? undefined
-    return <JoinScreen onJoin={handleJoin} onSpectate={handleSpectate} prefilledRoom={prefilledRoom} />
+    return <JoinScreen onJoin={handleJoin} onSpectate={handleSpectate} prefilledRoom={prefilledRoom} prefilledName={loadName()} />
   }
 
   return (

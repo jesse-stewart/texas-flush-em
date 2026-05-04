@@ -85,6 +85,10 @@ export interface GameState {
   abandonedByName: string | null
   players: PlayerState[]
   playerOrder: string[]             // active (non-eliminated) player ids in clockwise turn order
+  // The current round's dealer. Chosen at random for the first round, rotates clockwise each
+  // subsequent round. The player immediately clockwise of the dealer always takes the first turn.
+  // Stored as id (not index) so it survives playerOrder changes when players are eliminated/leave.
+  dealerId: string | null
   currentPlayerIndex: number        // index into playerOrder
   leadPlayerIndex: number           // who led this hand
   turnPhase: 'discard' | 'play'    // where we are within the current player's turn

@@ -33,13 +33,14 @@ interface ActionBarProps {
 export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFold }: ActionBarProps) {
   const isMyTurn = state.currentPlayerId === myPlayerId
   const inDiscard = state.turnPhase === 'discard'
+  const deckEmpty = state.myDeckSize === 0
 
   const evaluated = selected.length > 0 ? evaluateHand(selected) : null
   const isValidHand = evaluated !== null
   const doesBeat = isValidHand && (state.currentTopPlay === null || beats(evaluated, state.currentTopPlay))
 
-  // Discard: only in discard phase, only when cards are selected
-  const canDiscard = isMyTurn && inDiscard && selected.length > 0
+  // Discard: only in discard phase, only when cards are selected, and only if there's a deck to draw from
+  const canDiscard = isMyTurn && inDiscard && selected.length > 0 && !deckEmpty
 
   // Play: valid hand that beats top. Works in either phase (auto-skips discard if needed).
   const canPlay = isMyTurn && isValidHand && doesBeat
@@ -52,11 +53,13 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
   if (!isMyTurn) {
     hint = 'Waiting for other players…'
   } else if (selected.length === 0) {
-    hint = inDiscard
+    hint = inDiscard && !deckEmpty
       ? 'Select cards to discard, or select cards to play directly'
       : 'Select cards to play, or fold'
   } else if (!isValidHand) {
-    hint = 'Not a valid hand — keep selecting or discard instead'
+    hint = deckEmpty
+      ? 'Not a valid hand — your deck is empty, keep selecting or fold'
+      : 'Not a valid hand — keep selecting or discard instead'
   } else if (!doesBeat) {
     hint = `${CATEGORY_LABEL[evaluated!.category]} — doesn't beat the current play`
   } else if (state.currentTopPlay === null) {

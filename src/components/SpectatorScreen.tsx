@@ -24,6 +24,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         allPlayers={state.players}
         myPlayerId=""
         currentPlayerId={state.currentPlayerId}
+        dealerId={state.dealerId}
         presence={presence}
         events={state.events}
       />

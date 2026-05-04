@@ -49,6 +49,7 @@ export function mockState(overrides: Partial<ClientGameState> = {}): ClientGameS
     currentHandPlays: [],
     currentPlayerId: 'p1',
     leadPlayerId: 'p1',
+    dealerId: 'p2',
     roundWinnerId: null,
     gameWinnerId: null,
     scores: { p1: 0, p2: 0 },

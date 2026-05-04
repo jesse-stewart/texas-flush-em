@@ -1,7 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
 import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
+
+// Persist game settings across sessions so the lobby form remembers what the user
+// last picked. We store the *user's* values (e.g. mixedCards before clamping) — the
+// component re-clamps on load against the current player count.
+const SETTINGS_KEY = 'flushem_settings'
+
+interface PersistedSettings {
+  scoringMode: GameOptions['scoringMode']
+  pointsTarget: number
+  chipsStarting: number
+  pointsThresholdAction: GameOptions['pointsThresholdAction']
+  dealMode: DealMode
+  personalCards: number
+  mixedDeckCount: number
+  mixedCards: number
+}
 
 // Numeric input with +/- buttons. Typed input is held as a draft string and only
 // clamped/committed on blur or Enter, so editing "52" → "26" doesn't re-clamp on each keystroke.
@@ -67,6 +83,33 @@ const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
 const DEFAULT_POINTS_TARGET = 26
 const DEFAULT_CHIPS_STARTING = 13
 
+const DEFAULT_SETTINGS: PersistedSettings = {
+  scoringMode: DEFAULT_OPTIONS.scoringMode,
+  pointsTarget: DEFAULT_POINTS_TARGET,
+  chipsStarting: DEFAULT_CHIPS_STARTING,
+  pointsThresholdAction: DEFAULT_OPTIONS.pointsThresholdAction,
+  dealMode: DEFAULT_OPTIONS.dealMode,
+  personalCards: PERSONAL_MAX_CARDS,
+  mixedDeckCount: DEFAULT_OPTIONS.mixedDeckCount,
+  mixedCards: MIXED_DEFAULT_CARDS,
+}
+
+function loadSettings(): PersistedSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) return DEFAULT_SETTINGS
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) as Partial<PersistedSettings> }
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
+function saveSettings(s: PersistedSettings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
+  } catch { /* quota / private mode — silently ignore */ }
+}
+
 // Estimator constants — per-player time per round, calibrated from real play.
 // Humans deliberate; bots return decisions in roughly a couple of seconds.
 const HUMAN_MIN_PER_ROUND = 2.5
@@ -102,14 +145,23 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAdd
   const [copied, setCopied] = useState(false)
 
   // Local options state — whoever clicks Start sends their chosen settings to the server.
-  const [scoringMode, setScoringMode] = useState<GameOptions['scoringMode']>(DEFAULT_OPTIONS.scoringMode)
-  const [pointsTarget, setPointsTarget] = useState(DEFAULT_POINTS_TARGET)
-  const [chipsStarting, setChipsStarting] = useState(DEFAULT_CHIPS_STARTING)
-  const [pointsThresholdAction, setPointsThresholdAction] = useState<GameOptions['pointsThresholdAction']>(DEFAULT_OPTIONS.pointsThresholdAction)
-  const [dealMode, setDealMode] = useState<DealMode>(DEFAULT_OPTIONS.dealMode)
-  const [personalCards, setPersonalCards] = useState(PERSONAL_MAX_CARDS)
-  const [mixedDeckCount, setMixedDeckCount] = useState(DEFAULT_OPTIONS.mixedDeckCount)
-  const [mixedCards, setMixedCards] = useState(MIXED_DEFAULT_CARDS)
+  // Initial values come from localStorage so the lobby remembers the user's last picks.
+  const initial = useMemo(loadSettings, [])
+  const [scoringMode, setScoringMode] = useState<GameOptions['scoringMode']>(initial.scoringMode)
+  const [pointsTarget, setPointsTarget] = useState(initial.pointsTarget)
+  const [chipsStarting, setChipsStarting] = useState(initial.chipsStarting)
+  const [pointsThresholdAction, setPointsThresholdAction] = useState<GameOptions['pointsThresholdAction']>(initial.pointsThresholdAction)
+  const [dealMode, setDealMode] = useState<DealMode>(initial.dealMode)
+  const [personalCards, setPersonalCards] = useState(initial.personalCards)
+  const [mixedDeckCount, setMixedDeckCount] = useState(initial.mixedDeckCount)
+  const [mixedCards, setMixedCards] = useState(initial.mixedCards)
+
+  useEffect(() => {
+    saveSettings({
+      scoringMode, pointsTarget, chipsStarting, pointsThresholdAction,
+      dealMode, personalCards, mixedDeckCount, mixedCards,
+    })
+  }, [scoringMode, pointsTarget, chipsStarting, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
 
   const playerCount = Math.max(state.players.length, 1)
 

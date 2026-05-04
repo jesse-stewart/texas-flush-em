@@ -16,10 +16,11 @@ interface PlayerHandProps {
   disabled: boolean
   deckSize: number
   discardingCards: DiscardingSlot[]   // FLIP source IDs must match `ids` so motion can animate
+  isDealer?: boolean
 }
 
 export function PlayerHand({
-  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer,
 }: PlayerHandProps) {
   return (
     <div style={styles.container}>
@@ -30,6 +31,7 @@ export function PlayerHand({
           <span style={styles.metaSep}>·</span>
           <span style={styles.metaLabel}>deck</span>
           <span style={styles.metaValue}>{deckSize}</span>
+          {isDealer && <span style={styles.dealerBadge} title="You are the dealer this round">D</span>}
         </div>
         <div style={styles.sortBtns}>
           <button style={styles.sortBtn} onClick={onSortByRank}>Sort by rank</button>
@@ -138,6 +140,19 @@ const styles: Record<string, React.CSSProperties> = {
   metaSep: {
     color: '#4b5563',
     fontSize: 13,
+  },
+  dealerBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#1f2937',
+    backgroundColor: '#fde68a',
+    marginLeft: 4,
   },
   sortBtns: {
     display: 'flex',

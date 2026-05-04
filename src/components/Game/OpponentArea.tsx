@@ -18,11 +18,12 @@ interface OpponentAreaProps {
   allPlayers: PlayerView[]
   myPlayerId: string
   currentPlayerId: string | null
+  dealerId: string | null
   presence: Map<string, PlayerPresence>
   events: GameEvent[]
 }
 
-export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, presence, events }: OpponentAreaProps) {
+export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events }: OpponentAreaProps) {
   if (opponents.length === 0) return null
 
   return (
@@ -32,6 +33,7 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
           key={p.id}
           player={p}
           isActive={p.id === currentPlayerId}
+          isDealer={p.id === dealerId}
           presence={presence.get(p.id) ?? null}
           events={events}
           myPlayerId={myPlayerId}
@@ -50,10 +52,11 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
 }))
 
 function OpponentSeat({
-  player, isActive, presence, events, myPlayerId, allPlayers,
+  player, isActive, isDealer, presence, events, myPlayerId, allPlayers,
 }: {
   player: PlayerView
   isActive: boolean
+  isDealer: boolean
   presence: PlayerPresence | null
   events: GameEvent[]
   myPlayerId: string
@@ -93,6 +96,7 @@ function OpponentSeat({
           {!hasLeft && player.eliminated && <span style={styles.foldedTag}> · out</span>}
           {!player.eliminated && player.folded && <span style={styles.foldedTag}> · folded</span>}
         </span>
+        {isDealer && <span style={styles.dealerBadge} title="Dealer">D</span>}
         {player.isBot && player.botDifficulty && (
           <span
             style={{
@@ -129,7 +133,9 @@ function OpponentSeat({
         <div style={styles.pileGroup}>
           <div style={{ position: 'relative', width: 80 + deckLayers * 3, height: 112 + deckLayers * 3 }}>
             {deckCount === 0 ? (
-              <span style={styles.emptyLabel}>empty</span>
+              <div style={styles.deckPlaceholder}>
+                <span style={styles.emptyLabel}>empty</span>
+              </div>
             ) : (
               Array.from({ length: deckLayers }).map((_, i) => (
                 <div key={i} style={{ position: 'absolute', left: i * 3, top: (deckLayers - 1 - i) * 3, zIndex: i }}>
@@ -138,6 +144,7 @@ function OpponentSeat({
               ))
             )}
           </div>
+          <span style={styles.deckCount}>{deckCount} in deck</span>
         </div>
       </div>
     </div>
@@ -185,6 +192,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 6px',
     borderRadius: 4,
   },
+  dealerBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#1f2937',
+    backgroundColor: '#fde68a',
+    flexShrink: 0,
+  },
   piles: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -206,5 +226,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     color: '#4b5563',
     fontStyle: 'italic',
+  },
+  deckPlaceholder: {
+    width: 80,
+    height: 112,
+    borderRadius: 8,
+    border: '2px dashed rgba(255,255,255,0.15)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deckCount: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: 500,
   },
 }

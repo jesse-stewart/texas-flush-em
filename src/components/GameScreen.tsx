@@ -208,6 +208,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           allPlayers={state.players}
           myPlayerId={myPlayerId}
           currentPlayerId={state.currentPlayerId}
+          dealerId={state.dealerId}
           presence={presence}
           events={state.events}
         />
@@ -234,6 +235,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           disabled={state.currentPlayerId !== myPlayerId}
           deckSize={state.myDeckSize}
           discardingCards={discardingCards}
+          isDealer={state.dealerId === myPlayerId}
         />
       </LayoutGroup>
 

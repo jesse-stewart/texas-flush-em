@@ -18,10 +18,12 @@ Before play begins, agree on how cards reach each player. The digital version ex
 
 ## Setup
 
-1. Choose a dealer for the first round (any method — high card draw, youngest player, etc.). The dealer shuffles the deck(s).
+1. Choose the first dealer at random (cut for high card, draw straws, dice — anything fair). The dealer shuffles the deck(s).
 2. Deal according to the chosen Deal Mode (above).
 3. Each player keeps their dealt cards face-down as their personal **deck**.
 4. Each player draws the top 10 cards from their deck.
+
+The deal then rotates clockwise — each round, the player to the previous dealer's left becomes the new dealer.
 
 ## Terminology
 
@@ -36,7 +38,7 @@ Win the round by being the first to empty your cards. Win the game by taking eve
 
 ## Turn Structure
 
-The player to the dealer's left takes the first turn. Play proceeds clockwise.
+The player to the dealer's left always takes the first turn. Play proceeds clockwise.
 
 On your turn, in order:
 
@@ -101,7 +103,7 @@ Each player starts with an agreed pile of chips (typical: 13). After each round,
 
 ## Next Round
 
-The winner of the previous round deals the next round. The player to the winner's left goes first.
+The deal rotates clockwise — the player to the previous dealer's left deals the next round. The player to the new dealer's left goes first. (The round's winner has no special role in seating; the deal rotates regardless of who won.)
 
 ## Three-Player Note
 
@@ -161,7 +163,7 @@ Each player brings their own standard 52-card deck — or, by agreement, a small
 
 Each player shuffles their own deck and draws the top 10 cards. There is no initial dealing — every player starts with their full personal deck.
 
-For the first round, choose a starting player by any method (high card draw, youngest player, etc.). For all subsequent rounds, the player to the left of the previous round's winner goes first. Play proceeds clockwise.
+For the first round, choose the first dealer at random. The player to the dealer's left goes first. The dealer role then rotates clockwise each round; the player to the new dealer's left always goes first. Play within a turn proceeds clockwise.
 
 ## What's the Same
 

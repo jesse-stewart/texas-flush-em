@@ -45,6 +45,16 @@ function playSingle(state: GameState, card?: Card): GameState {
   return applyCommand(state, { type: 'PLAY', playerId, cards: [cardToPlay] })
 }
 
+// Whose turn is it right now.
+function currentId(state: GameState): string {
+  return state.playerOrder[state.currentPlayerIndex]
+}
+
+// In a 2-player state, the player who isn't `id`.
+function otherId(state: GameState, id: string): string {
+  return state.playerOrder.find(p => p !== id)!
+}
+
 // ============================================================
 // ADD_PLAYER
 // ============================================================
@@ -119,9 +129,23 @@ describe('START_GAME', () => {
   it('sets initial turn state correctly', () => {
     const s = startedGame()
     expect(s.turnPhase).toBe('discard')
-    expect(s.currentPlayerIndex).toBe(0)
-    expect(s.leadPlayerIndex).toBe(0)
+    // First dealer is random; the player to the dealer's left takes the first turn.
+    expect(s.dealerId).not.toBeNull()
+    const dealerIndex = s.playerOrder.indexOf(s.dealerId!)
+    expect(dealerIndex).toBeGreaterThanOrEqual(0)
+    expect(s.currentPlayerIndex).toBe((dealerIndex + 1) % s.playerOrder.length)
+    expect(s.leadPlayerIndex).toBe(s.currentPlayerIndex)
     expect(s.currentTopPlay).toBeNull()
+  })
+
+  it('first dealer is random across many starts', () => {
+    // Probabilistic — with 2 players, after 30 starts both should have been picked at least once.
+    const seen = new Set<string>()
+    for (let i = 0; i < 30; i++) {
+      const s = startedGame()
+      seen.add(s.dealerId!)
+    }
+    expect(seen.size).toBeGreaterThan(1)
   })
 
   it('rejects with fewer than 2 players', () => {
@@ -184,7 +208,7 @@ describe('DISCARD', () => {
 
   it('removes discarded cards from hand', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     const toDiscard = player.hand.slice(0, 3)
     const s2 = applyCommand(s, { type: 'DISCARD', playerId, cards: toDiscard })
@@ -196,7 +220,7 @@ describe('DISCARD', () => {
 
   it('discarded cards go to bottom of deck', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     const originalDeckSize = player.deck.length
     const toDiscard = player.hand.slice(0, 2)
@@ -208,7 +232,7 @@ describe('DISCARD', () => {
 
   it('rejects discard from wrong player', () => {
     const s = startedGame()
-    const wrongId = s.playerOrder[1]
+    const wrongId = otherId(s, currentId(s))
     const wrongPlayer = s.players.find(p => p.id === wrongId)!
     const s2 = applyCommand(s, { type: 'DISCARD', playerId: wrongId, cards: [wrongPlayer.hand[0]] })
     expect(s2.turnPhase).toBe('discard') // unchanged
@@ -216,7 +240,7 @@ describe('DISCARD', () => {
 
   it('rejects more than 5 cards', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     const s2 = applyCommand(s, { type: 'DISCARD', playerId, cards: player.hand.slice(0, 6) })
     expect(s2.turnPhase).toBe('discard') // rejected
@@ -224,7 +248,7 @@ describe('DISCARD', () => {
 
   it('rejects cards not in hand', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const fakeCard = c('A', 'spades')
     // Make sure the fake card isn't actually in their hand
     const player = s.players.find(p => p.id === playerId)!
@@ -237,7 +261,7 @@ describe('DISCARD', () => {
 
   it('skips discard/draw when deck is empty', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     // Drain the deck manually
     const emptyDeckState: GameState = {
       ...s,
@@ -260,18 +284,18 @@ describe('PLAY', () => {
   it('valid single card play advances to next player discard phase', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const playerId = s.playerOrder[0]
-    const nextPlayerId = s.playerOrder[1]
+    const playerId = currentId(s)
+    const nextPlayerId = otherId(s, playerId)
     const player = s.players.find(p => p.id === playerId)!
     s = applyCommand(s, { type: 'PLAY', playerId, cards: [player.hand[0]] })
     expect(s.turnPhase).toBe('discard')
-    expect(s.playerOrder[s.currentPlayerIndex]).toBe(nextPlayerId)
+    expect(currentId(s)).toBe(nextPlayerId)
   })
 
   it('sets currentTopPlay after a valid play', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     const card = player.hand[0]
     s = applyCommand(s, { type: 'PLAY', playerId, cards: [card] })
@@ -282,7 +306,7 @@ describe('PLAY', () => {
   it('replenishes hand after playing', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     s = applyCommand(s, { type: 'PLAY', playerId, cards: [player.hand[0]] })
     const updated = s.players.find(p => p.id === playerId)!
@@ -298,16 +322,17 @@ describe('PLAY', () => {
     let s = startedGame()
     // P1 discard + play
     s = skipDiscard(s)
-    const p1 = s.players.find(p => p.id === s.playerOrder[0])!
+    const p1Id = currentId(s)
+    const p1 = s.players.find(p => p.id === p1Id)!
     // Find a non-ace, non-king to play first (so p2 can beat it)
     const lowCard = p1.hand.find(c2 => typeof c2.rank === 'number' && c2.rank <= 5) ?? p1.hand[0]
-    s = applyCommand(s, { type: 'PLAY', playerId: s.playerOrder[0], cards: [lowCard] })
+    s = applyCommand(s, { type: 'PLAY', playerId: p1Id, cards: [lowCard] })
     const topAfterP1 = s.currentTopPlay
     expect(topAfterP1).not.toBeNull()
 
     // P2 discard phase
     s = skipDiscard(s)
-    const p2Id = s.playerOrder[s.currentPlayerIndex]
+    const p2Id = currentId(s)
     const p2 = s.players.find(p => p.id === p2Id)!
     // Try to play a card that can't beat the top — if all p2's cards beat it, skip this sub-test
     const cannotBeat = p2.hand.filter(c2 => {
@@ -325,7 +350,7 @@ describe('PLAY', () => {
   it('rejects play from wrong player', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const wrongId = s.playerOrder[1]
+    const wrongId = otherId(s, currentId(s))
     const wrongPlayer = s.players.find(p => p.id === wrongId)!
     const before = s.currentTopPlay
     s = applyCommand(s, { type: 'PLAY', playerId: wrongId, cards: [wrongPlayer.hand[0]] })
@@ -334,7 +359,7 @@ describe('PLAY', () => {
 
   it('rejects play during discard phase', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const player = s.players.find(p => p.id === playerId)!
     const s2 = applyCommand(s, { type: 'PLAY', playerId, cards: [player.hand[0]] })
     expect(s2.turnPhase).toBe('discard') // still in discard
@@ -343,7 +368,7 @@ describe('PLAY', () => {
   it('rejects cards not in hand', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const fakeCard = c('A', 'spades')
     const player = s.players.find(p => p.id === playerId)!
     const hasCard = player.hand.some(c2 => c2.rank === fakeCard.rank && c2.suit === fakeCard.suit)
@@ -377,10 +402,10 @@ describe('FOLD', () => {
   it('ends hand when only one player remains', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const p1Id = s.playerOrder[0]
+    const p1Id = currentId(s)
     s = playSingle(s) // p1 plays
     s = skipDiscard(s)
-    const p2Id = s.playerOrder[s.currentPlayerIndex]
+    const p2Id = currentId(s)
     s = applyCommand(s, { type: 'FOLD', playerId: p2Id }) // p2 folds — hand ends
     // p1 won the hand, so p1 leads the next hand
     expect(s.leadPlayerIndex).toBe(s.playerOrder.indexOf(p1Id))
@@ -390,12 +415,12 @@ describe('FOLD', () => {
 
   it('hand ends with no winner when lead folds with no play', () => {
     const s = startedGame()
-    // In discard phase → skip to play phase for p1 first
+    // In discard phase → skip to play phase for the current player first
     const s2 = skipDiscard(s)
-    const p1Id = s2.playerOrder[0]
-    // p1 folds immediately (no play made)
-    const s3 = applyCommand(s2, { type: 'FOLD', playerId: p1Id })
-    // With 2 players: p2 is now alone and has not folded → hand ends, no winner (p1 made no play)
+    const leadId = currentId(s2)
+    // lead folds immediately (no play made)
+    const s3 = applyCommand(s2, { type: 'FOLD', playerId: leadId })
+    // With 2 players: the other is now alone and has not folded → hand ends, no winner
     expect(s3.currentTopPlay).toBeNull()
     // lead passes to next player
     expect(s3.players.every(p => !p.folded)).toBe(true)
@@ -404,7 +429,7 @@ describe('FOLD', () => {
   it('rejects fold from wrong player', () => {
     let s = startedGame()
     s = skipDiscard(s)
-    const wrongId = s.playerOrder[1]
+    const wrongId = otherId(s, currentId(s))
     const before = { ...s }
     s = applyCommand(s, { type: 'FOLD', playerId: wrongId })
     expect(s.turnPhase).toBe(before.turnPhase) // unchanged
@@ -413,9 +438,40 @@ describe('FOLD', () => {
 
   it('rejects fold during discard phase', () => {
     const s = startedGame()
-    const playerId = s.playerOrder[0]
+    const playerId = currentId(s)
     const s2 = applyCommand(s, { type: 'FOLD', playerId })
     expect(s2.turnPhase).toBe('discard') // unchanged
+  })
+
+  // Regression: eliminated players keep folded=false across rounds. The active-count
+  // check in applyFold/applyPlay must ignore them, otherwise the last remaining
+  // active player can fold without the hand ending — leading to an infinite turn loop.
+  it('ends hand when sole opponent folds, even with eliminated players still seated', () => {
+    let s = initialState()
+    s = addPlayers(s,
+      { id: 'p1', name: 'Alice' },
+      { id: 'p2', name: 'Bob' },
+      { id: 'p3', name: 'Carol' },
+    )
+    s = applyCommand(s, { type: 'START_GAME' })
+    // Simulate a prior round where p3 was eliminated: folded=false (reset by endHand),
+    // eliminated=true, and removed from playerOrder (as applyNextRound does).
+    s = {
+      ...s,
+      players: s.players.map(p =>
+        p.id === 'p3' ? { ...p, eliminated: true, folded: false } : p,
+      ),
+      playerOrder: ['p1', 'p2'],
+      currentPlayerIndex: 0,
+      leadPlayerIndex: 0,
+    }
+    // p1 plays, p2 folds — hand should end with p1 as the winner.
+    s = skipDiscard(s)
+    s = playSingle(s)
+    s = skipDiscard(s)
+    s = applyCommand(s, { type: 'FOLD', playerId: 'p2' })
+    expect(s.currentTopPlay).toBeNull() // hand cleared
+    expect(s.leadPlayerIndex).toBe(s.playerOrder.indexOf('p1')) // p1 leads next hand
   })
 })
 
@@ -424,19 +480,20 @@ describe('FOLD', () => {
 // ============================================================
 
 describe('full turn sequence', () => {
-  it('completes a full 2-player hand: p1 plays, p2 folds, p1 wins hand', () => {
+  it('completes a full 2-player hand: leader plays, opponent folds, leader wins hand', () => {
     let s = startedGame()
-    const [p1Id, p2Id] = s.playerOrder
+    const p1Id = currentId(s)        // first player (left of random dealer)
+    const p2Id = otherId(s, p1Id)
 
     // P1 turn: discard nothing, play one card
     s = skipDiscard(s)
     expect(s.turnPhase).toBe('play')
-    expect(s.playerOrder[s.currentPlayerIndex]).toBe(p1Id)
+    expect(currentId(s)).toBe(p1Id)
     s = playSingle(s)
 
     // P2 turn: discard phase
     expect(s.turnPhase).toBe('discard')
-    expect(s.playerOrder[s.currentPlayerIndex]).toBe(p2Id)
+    expect(currentId(s)).toBe(p2Id)
     s = skipDiscard(s)
 
     // P2 folds
@@ -448,9 +505,9 @@ describe('full turn sequence', () => {
   })
 
   it('full round end: player plays last card and wins', () => {
-    // Build a state where a player has only 1 card in hand and empty deck
+    // Build a state where the current player has only 1 card in hand and empty deck
     let s = startedGame()
-    const p1Id = s.playerOrder[0]
+    const p1Id = currentId(s)
 
     // Give p1 exactly 1 card in hand, empty deck
     const p1 = s.players.find(p => p.id === p1Id)!
@@ -472,8 +529,8 @@ describe('full turn sequence', () => {
 
   it('scoring: non-winner scores cards remaining in hand', () => {
     let s = startedGame()
-    const p1Id = s.playerOrder[0]
-    const p2Id = s.playerOrder[1]
+    const p1Id = currentId(s)
+    const p2Id = otherId(s, p1Id)
 
     // Give p1 1 card and empty deck (will win)
     // Give p2 5 cards in hand
@@ -499,8 +556,8 @@ describe('full turn sequence', () => {
 
   it('scoring caps at 10 even if more than 10 cards remain', () => {
     let s = startedGame()
-    const p1Id = s.playerOrder[0]
-    const p2Id = s.playerOrder[1]
+    const p1Id = currentId(s)
+    const p2Id = otherId(s, p1Id)
 
     const p1 = s.players.find(p => p.id === p1Id)!
 
@@ -573,9 +630,18 @@ describe('buildClientState', () => {
   it('exposes correct turn info', () => {
     const s = startedGame()
     const view = buildClientState(s, s.playerOrder[0])
-    expect(view.currentPlayerId).toBe(s.playerOrder[0])
+    expect(view.currentPlayerId).toBe(currentId(s))
     expect(view.turnPhase).toBe('discard')
     expect(view.phase).toBe('playing')
+  })
+
+  it('exposes the dealer id', () => {
+    const s = startedGame()
+    const view = buildClientState(s, s.playerOrder[0])
+    expect(view.dealerId).toBe(s.dealerId)
+    // The current player must be the one to the dealer's left.
+    const dealerIndex = s.playerOrder.indexOf(view.dealerId!)
+    expect(view.currentPlayerId).toBe(s.playerOrder[(dealerIndex + 1) % s.playerOrder.length])
   })
 })
 
@@ -586,8 +652,8 @@ describe('buildClientState', () => {
 describe('NEXT_ROUND', () => {
   it('preserves accumulated scores into the next round', () => {
     let s = startedGame()
-    const p1Id = s.playerOrder[0]
-    const p2Id = s.playerOrder[1]
+    const p1Id = currentId(s)
+    const p2Id = otherId(s, p1Id)
     const p1 = s.players.find(p => p.id === p1Id)!
 
     // Give p1 one card and empty deck so they can win
@@ -611,39 +677,68 @@ describe('NEXT_ROUND', () => {
 
   it('accumulates scores across two rounds', () => {
     let s = startedGame()
-    const p1Id = s.playerOrder[0]
-    const p2Id = s.playerOrder[1]
+    const round1Lead = currentId(s)
+    const round1Other = otherId(s, round1Lead)
 
-    // Round 1: p1 wins (1 card left), p2 has 3 cards in hand
+    // Round 1: round1Lead wins (1 card left), round1Other has 3 cards in hand
     s = { ...s, players: s.players.map(p => {
-      if (p.id === p1Id) return { ...p, hand: [p.hand[0]], deck: [] }
+      if (p.id === round1Lead) return { ...p, hand: [p.hand[0]], deck: [] }
       return { ...p, hand: p.hand.slice(0, 3), deck: [] }
     })}
     s = skipDiscard(s)
-    s = applyCommand(s, { type: 'PLAY', playerId: p1Id, cards: [s.players.find(p => p.id === p1Id)!.hand[0]] })
-    expect(s.scores[p1Id]).toBe(0)
-    expect(s.scores[p2Id]).toBe(3)
+    s = applyCommand(s, { type: 'PLAY', playerId: round1Lead, cards: [s.players.find(p => p.id === round1Lead)!.hand[0]] })
+    expect(s.scores[round1Lead]).toBe(0)
+    expect(s.scores[round1Other]).toBe(3)
 
     s = applyCommand(s, { type: 'NEXT_ROUND' })
 
-    // After NEXT_ROUND: p1 won round 1, so p2 leads round 2 (winner's left goes first)
-    // Give p2 (the new lead) 1 card so they can win; p1 has 4 cards
-    const leadId = s.playerOrder[s.currentPlayerIndex] // should be p2
-    const otherId = s.playerOrder.find(id => id !== leadId)!
-    const leadPlayer = s.players.find(p => p.id === leadId)!
+    // After NEXT_ROUND: deal rotates clockwise (independent of who won), so the new
+    // first player is the player to the new dealer's left.
+    const round2Lead = currentId(s)
+    const round2Other = otherId(s, round2Lead)
+    const leadPlayer = s.players.find(p => p.id === round2Lead)!
     s = { ...s, players: s.players.map(p =>
-      p.id === leadId
+      p.id === round2Lead
         ? { ...p, hand: [leadPlayer.hand[0]], deck: [] }
         : { ...p, hand: p.hand.slice(0, 4), deck: [] }
     )}
     s = skipDiscard(s)
-    s = applyCommand(s, { type: 'PLAY', playerId: leadId, cards: [s.players.find(p => p.id === leadId)!.hand[0]] })
+    s = applyCommand(s, { type: 'PLAY', playerId: round2Lead, cards: [s.players.find(p => p.id === round2Lead)!.hand[0]] })
 
     expect(s.phase).toBe('round_end')
-    expect(s.roundWinnerId).toBe(leadId)
-    // leadId scored 0 this round; otherId scored 4 this round
-    // Accumulated: leadId = 3 (round1 loss) + 0 = 3, otherId = 0 (round1 win) + 4 = 4
-    expect(s.scores[leadId]).toBe(3)
-    expect(s.scores[otherId]).toBe(4)
+    expect(s.roundWinnerId).toBe(round2Lead)
+    // Round 2 winner picks up 0; round 2 loser picks up 4. Add to round 1 totals.
+    const expectedLeadCumulative = (round2Lead === round1Lead ? 0 : 3) + 0
+    const expectedOtherCumulative = (round2Other === round1Lead ? 0 : 3) + 4
+    expect(s.scores[round2Lead]).toBe(expectedLeadCumulative)
+    expect(s.scores[round2Other]).toBe(expectedOtherCumulative)
+  })
+
+  it('rotates the dealer clockwise across rounds', () => {
+    let s = startedGame()
+    const round1DealerId = s.dealerId!
+    const round1FirstPlayer = currentId(s)
+    // First player should be left of dealer.
+    const round1DealerIdx = s.playerOrder.indexOf(round1DealerId)
+    expect(round1FirstPlayer).toBe(s.playerOrder[(round1DealerIdx + 1) % s.playerOrder.length])
+
+    // Drive a round to completion: give the current player a single card and let them play it.
+    const winnerId = currentId(s)
+    const winner = s.players.find(p => p.id === winnerId)!
+    s = { ...s, players: s.players.map(p =>
+      p.id === winnerId ? { ...p, hand: [winner.hand[0]], deck: [] } : p
+    )}
+    s = skipDiscard(s)
+    s = applyCommand(s, { type: 'PLAY', playerId: winnerId, cards: [s.players.find(p => p.id === winnerId)!.hand[0]] })
+    expect(s.phase).toBe('round_end')
+
+    s = applyCommand(s, { type: 'NEXT_ROUND' })
+
+    // Dealer should have rotated clockwise (next index).
+    const expectedRound2Dealer = s.playerOrder[(round1DealerIdx + 1) % s.playerOrder.length]
+    expect(s.dealerId).toBe(expectedRound2Dealer)
+    // First player is the one to the new dealer's left, regardless of who won.
+    const round2DealerIdx = s.playerOrder.indexOf(s.dealerId!)
+    expect(currentId(s)).toBe(s.playerOrder[(round2DealerIdx + 1) % s.playerOrder.length])
   })
 })

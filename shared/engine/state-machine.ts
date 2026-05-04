@@ -48,6 +48,37 @@ function effectiveDeckCount(options: GameOptions, playerCount: number): number {
   return 1
 }
 
+// Pick a random integer in [0, n) using Math.random — same source already used by shuffle().
+function randomIndex(n: number): number {
+  return Math.floor(Math.random() * n)
+}
+
+// Find the next dealer for the upcoming round. The dealer rotates clockwise; if the previous
+// dealer is no longer in the active order (eliminated, left), we use their old seat to find
+// the next clockwise active player from the prior order. `prevPlayerOrder` is the player order
+// *before* eliminations were applied for the new round, so we can locate the prior dealer's seat.
+function rotateDealer(
+  prevDealerId: string | null,
+  prevPlayerOrder: string[],
+  newPlayerOrder: string[],
+): string {
+  if (newPlayerOrder.length === 0) return ''
+  if (!prevDealerId) return newPlayerOrder[0]
+
+  const prevSeatIdx = prevPlayerOrder.indexOf(prevDealerId)
+  if (prevSeatIdx === -1) {
+    // Shouldn't normally happen, but if the prior dealer isn't in the prior order, fall back.
+    return newPlayerOrder[0]
+  }
+  // Walk clockwise from the seat *after* the previous dealer until we hit someone in the new order.
+  for (let i = 1; i <= prevPlayerOrder.length; i++) {
+    const candidate = prevPlayerOrder[(prevSeatIdx + i) % prevPlayerOrder.length]
+    const idxInNew = newPlayerOrder.indexOf(candidate)
+    if (idxInNew !== -1) return candidate
+  }
+  return newPlayerOrder[0]
+}
+
 // ============================================================
 // Commands — server-side actions (playerId added by the server)
 // ============================================================
@@ -96,6 +127,7 @@ export interface ClientGameState {
   currentHandPlays: HandPlay[]
   currentPlayerId: string | null
   leadPlayerId: string | null
+  dealerId: string | null
   roundWinnerId: string | null
   gameWinnerId: string | null
   scores: Record<string, number>
@@ -129,6 +161,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
     currentHandPlays: state.currentHandPlays ?? [],
     currentPlayerId: state.playerOrder[state.currentPlayerIndex] ?? null,
     leadPlayerId: state.playerOrder[state.leadPlayerIndex] ?? null,
+    dealerId: state.dealerId ?? null,
     roundWinnerId: state.roundWinnerId,
     gameWinnerId: state.gameWinnerId,
     scores: state.scores,
@@ -151,6 +184,7 @@ export function initialState(): GameState {
     phase: 'lobby',
     players: [],
     playerOrder: [],
+    dealerId: null,
     currentPlayerIndex: 0,
     leadPlayerIndex: 0,
     turnPhase: 'discard',
@@ -457,14 +491,20 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
   const scores: Record<string, number> = {}
   for (const p of players) scores[p.id] = initialScore
 
+  // First dealer is chosen at random; the player to the dealer's left takes the first turn.
+  const dealerIndex = randomIndex(playerOrder.length)
+  const firstPlayerIndex = (dealerIndex + 1) % playerOrder.length
+  const dealerId = playerOrder[dealerIndex]
+
   return withEvents(
     {
       ...state,
       phase: 'playing',
       players,
       playerOrder,
-      currentPlayerIndex: 0,
-      leadPlayerIndex: 0,
+      dealerId,
+      currentPlayerIndex: firstPlayerIndex,
+      leadPlayerIndex: firstPlayerIndex,
       turnPhase: 'discard',
       currentTopPlay: null,
       currentTopPlayerId: null,
@@ -519,9 +559,13 @@ function applyNextRound(state: GameState): GameState {
 
   const newPlayerOrder = activePlayers.map(p => p.id)
 
-  // Winner's left goes first; fall back to index 0
-  const winnerIndex = state.roundWinnerId ? newPlayerOrder.indexOf(state.roundWinnerId) : -1
-  const leadIndex = winnerIndex !== -1 ? (winnerIndex + 1) % newPlayerOrder.length : 0
+  // Deal rotates clockwise from the previous dealer (independent of who won the round).
+  // The player to the new dealer's left takes the first turn.
+  const newDealerId = rotateDealer(state.dealerId, state.playerOrder, newPlayerOrder)
+  const newDealerIndex = newPlayerOrder.indexOf(newDealerId)
+  const leadIndex = newDealerIndex === -1
+    ? 0
+    : (newDealerIndex + 1) % newPlayerOrder.length
 
   return withEvents(
     {
@@ -529,6 +573,7 @@ function applyNextRound(state: GameState): GameState {
       phase: 'playing',
       players,
       playerOrder: newPlayerOrder,
+      dealerId: newDealerId,
       currentPlayerIndex: leadIndex,
       leadPlayerIndex: leadIndex,
       turnPhase: 'discard',
@@ -616,8 +661,10 @@ function applyPlay(
     return endRound(stateWithPlay, players, cmd.playerId)
   }
 
-  // Hand end: all other players have already folded
-  const active = players.filter(p => !p.folded)
+  // Hand end: all other players have already folded.
+  // Eliminated players keep folded=false across rounds, so exclude them explicitly —
+  // otherwise they'd be counted as still in the hand.
+  const active = players.filter(p => !p.folded && !p.eliminated)
   if (active.length === 1 && active[0].id === cmd.playerId) {
     const nextState = withEvents(
       { ...state, players, currentTopPlay: evaluatedHand, currentTopPlayerId: cmd.playerId, currentHandPlays: updatedHandPlays },
@@ -651,7 +698,9 @@ function applyFold(state: GameState, cmd: { playerId: string }): GameState {
   if (!player) return state
 
   const players = state.players.map(p => p.id === cmd.playerId ? { ...p, folded: true } : p)
-  const active = players.filter(p => !p.folded)
+  // Eliminated players keep folded=false across rounds (they're not "in" the hand),
+  // so exclude them when counting who's still standing.
+  const active = players.filter(p => !p.folded && !p.eliminated)
 
   const foldedEvent = { type: 'folded' as const, playerId: cmd.playerId }
 
