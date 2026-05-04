@@ -3,6 +3,7 @@ import { useGame } from '../hooks/useGame'
 import { WaitingRoom } from './Lobby/WaitingRoom'
 import { GameScreen } from './GameScreen'
 import { SpectatorScreen } from './SpectatorScreen'
+import { EventLog } from './Game/EventLog'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameState } from '@shared/engine/game-state'
 import type { Card } from '@shared/engine/card'
@@ -85,8 +86,9 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
           myPlayerId={playerId}
           onStart={(options) => send({ type: 'START_GAME', options })}
           onLeave={onLeave}
-          onAddBot={() => send({ type: 'ADD_BOT' })}
+          onAddBot={(difficulty) => send({ type: 'ADD_BOT', difficulty })}
           onRemoveBot={(id) => send({ type: 'REMOVE_BOT', playerId: id })}
+          onSetBotDifficulty={(id, difficulty) => send({ type: 'SET_BOT_DIFFICULTY', playerId: id, difficulty })}
         />
       )
     } else if (state.phase === 'playing') {
@@ -113,8 +115,8 @@ export function GameRoom({ roomId, playerId, playerName, spectatorMode, onLeave 
             state={state}
             myPlayerId={playerId}
             isEliminated={isEliminated}
-            canStartRound={isActiveParticipant}
-            onNextRound={() => send({ type: 'NEXT_ROUND' })}
+            canReady={isActiveParticipant}
+            onReady={() => send({ type: 'READY_FOR_NEXT_ROUND' })}
             onSpectate={() => setSpectating(true)}
             onLeave={handleLeave}
           />
@@ -248,25 +250,32 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
         </tbody>
       </table>
 
+      <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
+
       <button onClick={onLeave} style={roundBtn('#16a34a')}>Back to lobby</button>
     </div>
   )
 }
 
 function RoundEndScreen({
-  state, myPlayerId, isEliminated, canStartRound, onNextRound, onSpectate, onLeave,
+  state, myPlayerId, isEliminated, canReady, onReady, onSpectate, onLeave,
 }: {
   state: ClientGameState
   myPlayerId: string
   isEliminated: boolean
-  canStartRound: boolean
-  onNextRound: () => void
+  canReady: boolean
+  onReady: () => void
   onSpectate: () => void
   onLeave: () => void
 }) {
   const winner = state.players.find(p => p.id === state.roundWinnerId)
   const isChips = state.options.scoringMode === 'chips'
   const totalLabel = isChips ? 'chips' : 'points'
+
+  // Humans whose readiness gates the next round (bots auto-ready; disconnected/eliminated skipped).
+  const requiredReady = state.players.filter(p => !p.isBot && !p.eliminated && p.isConnected)
+  const waitingFor = requiredReady.filter(p => !state.nextRoundReady[p.id])
+  const meReady = !!state.nextRoundReady[myPlayerId]
 
   // Chips: best (most chips) first. Points: best (lowest) first. Eliminated last.
   const sorted = [...state.players].sort((a, b) => {
@@ -276,8 +285,10 @@ function RoundEndScreen({
       : (state.scores[a.id] ?? 0) - (state.scores[b.id] ?? 0)
   })
 
+  const roundEvents = currentRoundEvents(state.events)
+
   return (
-    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 20 }}>
+    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 20, paddingTop: 32, paddingBottom: 32 }}>
       <h2 style={{ color: '#fff', margin: 0, fontSize: 24, fontWeight: 800 }}>
         {winner?.name ?? 'Someone'} wins the round!
       </h2>
@@ -308,11 +319,19 @@ function RoundEndScreen({
             } else {
               if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = '#fca5a5' }
             }
+            // Readiness indicator: only meaningful for humans we're waiting on.
+            const isRequired = !p.isBot && !p.eliminated && p.isConnected
+            const ready = !!state.nextRoundReady[p.id]
             return (
               <tr key={p.id} style={{ opacity: p.eliminated ? 0.45 : 1 }}>
                 <td style={{ textAlign: 'left', paddingRight: 24, paddingTop: 10, fontWeight: isMe ? 700 : 400, color: isMe ? '#fde68a' : '#d1d5db' }}>
                   {p.name}
                   {p.eliminated && <span style={{ marginLeft: 6, fontSize: 11, color: '#6b7280' }}>out</span>}
+                  {isRequired && (
+                    ready
+                      ? <span style={{ marginLeft: 8, fontSize: 11, color: '#6ee7b7' }}>ready</span>
+                      : <span style={{ marginLeft: 8, fontSize: 11, color: '#9ca3af' }}>waiting…</span>
+                  )}
                 </td>
                 <td style={{ paddingRight: 20, paddingTop: 10, color: '#6b7280' }}>{before}</td>
                 <td style={{ paddingRight: 20, paddingTop: 10, color: deltaColor, fontWeight: 600 }}>
@@ -331,17 +350,37 @@ function RoundEndScreen({
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-        {canStartRound && (
-          <button onClick={onNextRound} style={roundBtn('#16a34a')}>Start next round</button>
+      {roundEvents.length > 0 && (
+        <EventLog events={roundEvents} players={state.players} myPlayerId={myPlayerId} />
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 4 }}>
+        {canReady && !meReady && (
+          <button onClick={onReady} style={roundBtn('#16a34a')}>Start next round</button>
         )}
-        {isEliminated && (
-          <button onClick={onSpectate} style={roundBtn('#16a34a')}>Spectate</button>
+        {canReady && meReady && waitingFor.length > 0 && (
+          <span style={{ fontSize: 13, color: '#9ca3af' }}>
+            Ready ✓ — waiting for {waitingFor.map(p => p.name).join(', ')}
+          </span>
         )}
-        <button onClick={onLeave} style={roundBtn('rgba(255,255,255,0.1)')}>Leave</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {isEliminated && (
+            <button onClick={onSpectate} style={roundBtn('#16a34a')}>Spectate</button>
+          )}
+          <button onClick={onLeave} style={roundBtn('rgba(255,255,255,0.1)')}>Leave</button>
+        </div>
       </div>
     </div>
   )
+}
+
+// Slice the event log to only events from the most recent round (or game start).
+function currentRoundEvents(events: ClientGameState['events']): ClientGameState['events'] {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.type === 'round_started' || e.type === 'game_started') return events.slice(i)
+  }
+  return events
 }
 
 function roundBtn(bg: string): React.CSSProperties {
@@ -440,6 +479,16 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
                 )
               })}
             </div>
+          </div>
+        )}
+
+        {/* Game event log */}
+        {state.events.length > 0 && (
+          <div style={{ marginTop: 20, borderTop: '1px solid #374151', paddingTop: 16 }}>
+            <div style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+              Game events ({state.events.length})
+            </div>
+            <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
           </div>
         )}
 

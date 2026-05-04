@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ClientGameState } from '@shared/engine/state-machine'
-import type { GameOptions, DealMode } from '@shared/engine/game-state'
-import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS } from '@shared/engine/game-state'
+import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
+import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
 
 // Numeric input with +/- buttons. Typed input is held as a draft string and only
 // clamped/committed on blur or Enter, so editing "52" → "26" doesn't re-clamp on each keystroke.
@@ -52,8 +52,15 @@ interface WaitingRoomProps {
   myPlayerId: string
   onStart: (options: GameOptions) => void
   onLeave: () => void
-  onAddBot: () => void
+  onAddBot: (difficulty: BotDifficulty) => void
   onRemoveBot: (playerId: string) => void
+  onSetBotDifficulty: (playerId: string, difficulty: BotDifficulty) => void
+}
+
+const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
 }
 
 // Per-mode threshold defaults so toggling modes doesn't lose the user's chosen number.
@@ -89,7 +96,7 @@ function formatDuration(min: number): string {
   return m === 0 ? `~${h} hr` : `~${h} hr ${m} min`
 }
 
-export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot }: WaitingRoomProps) {
+export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot, onSetBotDifficulty }: WaitingRoomProps) {
   const canStart = state.players.length >= 2
   const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
@@ -169,22 +176,44 @@ export function WaitingRoom({ state, roomId, myPlayerId, onStart, onLeave, onAdd
                 {p.isBot && <span style={styles.botTag}>CPU</span>}
               </span>
               {p.isBot && (
-                <button
-                  style={styles.kickBtn}
-                  onClick={() => onRemoveBot(p.id)}
-                  aria-label={`Remove ${p.name}`}
-                >
-                  ×
-                </button>
+                <>
+                  <select
+                    style={styles.difficultySelect}
+                    value={p.botDifficulty ?? DEFAULT_BOT_DIFFICULTY}
+                    onChange={e => onSetBotDifficulty(p.id, e.target.value as BotDifficulty)}
+                    aria-label={`${p.name} difficulty`}
+                  >
+                    {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
+                      <option key={d} value={d}>{BOT_DIFFICULTY_LABELS[d]}</option>
+                    ))}
+                  </select>
+                  <button
+                    style={styles.kickBtn}
+                    onClick={() => onRemoveBot(p.id)}
+                    aria-label={`Remove ${p.name}`}
+                  >
+                    ×
+                  </button>
+                </>
               )}
             </li>
           ))}
           {Array.from({ length: 4 - state.players.length }).map((_, i) => (
             <li key={`empty-${i}`} style={styles.playerRow}>
               {i === 0 && canAddBot ? (
-                <button style={styles.addBotBtn} onClick={onAddBot}>
-                  + Add CPU player
-                </button>
+                <div style={styles.addBotRow}>
+                  <span style={styles.addBotLabel}>+ Add CPU</span>
+                  {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      style={styles.addBotDiffBtn}
+                      onClick={() => onAddBot(d)}
+                    >
+                      {BOT_DIFFICULTY_LABELS[d]}
+                    </button>
+                  ))}
+                </div>
               ) : (
                 <>
                   <span style={{ ...styles.dot(false), opacity: 0.35 }} />
@@ -470,17 +499,43 @@ const styles = {
     borderRadius: 4,
     padding: 0,
   } as React.CSSProperties,
-  addBotBtn: {
+  addBotRow: {
     flex: 1,
-    padding: '6px 10px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 8px',
+    border: '1px dashed #c4b5fd',
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+  } as React.CSSProperties,
+  addBotLabel: {
+    flex: 1,
     fontSize: 13,
     fontWeight: 600,
     color: '#6d28d9',
-    backgroundColor: 'transparent',
-    border: '1px dashed #c4b5fd',
-    borderRadius: 6,
+  } as React.CSSProperties,
+  addBotDiffBtn: {
+    padding: '4px 8px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#6d28d9',
+    backgroundColor: '#f5f3ff',
+    border: '1px solid #ddd6fe',
+    borderRadius: 4,
     cursor: 'pointer',
-    textAlign: 'left' as const,
+  } as React.CSSProperties,
+  difficultySelect: {
+    marginLeft: 'auto',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#6d28d9',
+    backgroundColor: '#f5f3ff',
+    border: '1px solid #ddd6fe',
+    borderRadius: 4,
+    padding: '2px 4px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   } as React.CSSProperties,
   settingsBlock: {
     display: 'flex',

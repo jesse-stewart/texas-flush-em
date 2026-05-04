@@ -3,8 +3,19 @@ import { createDeck, createMultiDeck, shuffle, dealAll, drawFromTop, insertToBot
 import { evaluateHand } from './hand-eval'
 import type { EvaluatedHand } from './hand-eval'
 import { validatePlay, validateDiscard, scoreRound } from './rules'
-import type { GameState, GameOptions, PlayerState, HandPlay } from './game-state'
-import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER } from './game-state'
+import type { GameState, GameOptions, PlayerState, HandPlay, BotDifficulty, GameEvent } from './game-state'
+import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, DEFAULT_BOT_DIFFICULTY } from './game-state'
+
+// Distributive Omit so the discriminated union survives ts-stripping.
+type EventInput = GameEvent extends infer E ? (E extends GameEvent ? Omit<E, 'ts'> : never) : never
+
+// Append events to the log without mutating state. Pass a partial event (no ts) — we stamp it.
+function withEvents(state: GameState, ...events: EventInput[]): GameState {
+  if (events.length === 0) return state
+  const ts = Date.now()
+  const stamped = events.map(e => ({ ...e, ts })) as GameEvent[]
+  return { ...state, events: [...(state.events ?? []), ...stamped] }
+}
 
 // ============================================================
 // Dealing — branches by dealMode. Returns one full pile (deck + initial hand) per player.
@@ -43,10 +54,12 @@ function effectiveDeckCount(options: GameOptions, playerCount: number): number {
 
 export type GameCommand =
   | { type: 'ADD_PLAYER'; playerId: string; playerName: string }
-  | { type: 'ADD_BOT'; playerId: string; playerName: string }
+  | { type: 'ADD_BOT'; playerId: string; playerName: string; difficulty?: BotDifficulty }
   | { type: 'REMOVE_BOT'; playerId: string }
+  | { type: 'SET_BOT_DIFFICULTY'; playerId: string; difficulty: BotDifficulty }
   | { type: 'START_GAME'; options?: Partial<GameOptions> }
   | { type: 'NEXT_ROUND' }
+  | { type: 'READY_FOR_NEXT_ROUND'; playerId: string }
   | { type: 'DISCARD'; playerId: string; cards: Card[] }
   | { type: 'PLAY'; playerId: string; cards: Card[] }
   | { type: 'FOLD'; playerId: string }
@@ -68,6 +81,7 @@ export interface PlayerView {
   isConnected: boolean
   eliminated: boolean
   isBot: boolean
+  botDifficulty?: BotDifficulty
 }
 
 export interface ClientGameState {
@@ -88,6 +102,8 @@ export interface ClientGameState {
   roundScoreDelta: Record<string, number>
   middlePileCount: number
   options: GameOptions
+  events: GameEvent[]
+  nextRoundReady: Record<string, boolean>
 }
 
 export function buildClientState(state: GameState, forPlayerId: string): ClientGameState {
@@ -103,6 +119,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
       isConnected: p.connected,
       eliminated: p.eliminated,
       isBot: p.isBot,
+      botDifficulty: p.botDifficulty,
     })),
     myHand: me?.hand ?? [],
     myDeckSize: me?.deck.length ?? 0,
@@ -119,6 +136,9 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
     abandonedByName: state.abandonedByName,
     middlePileCount: state.middlePile.length,
     options: state.options,
+    // Defaults guard against pre-schema persisted state surviving across engine upgrades.
+    events: state.events ?? [],
+    nextRoundReady: state.nextRoundReady ?? {},
   }
 }
 
@@ -145,6 +165,8 @@ export function initialState(): GameState {
     deckCount: 1,
     options: { ...DEFAULT_OPTIONS },
     abandonedByName: null,
+    events: [],
+    nextRoundReady: {},
   }
 }
 
@@ -155,10 +177,12 @@ export function initialState(): GameState {
 export function applyCommand(state: GameState, cmd: GameCommand): GameState {
   switch (cmd.type) {
     case 'ADD_PLAYER':  return applyAddPlayer(state, cmd, false)
-    case 'ADD_BOT':     return applyAddPlayer(state, cmd, true)
+    case 'ADD_BOT':     return applyAddPlayer(state, cmd, true, cmd.difficulty)
     case 'REMOVE_BOT':  return applyRemoveBot(state, cmd)
+    case 'SET_BOT_DIFFICULTY': return applySetBotDifficulty(state, cmd)
     case 'START_GAME':  return applyStartGame(state, cmd)
     case 'NEXT_ROUND':  return applyNextRound(state)
+    case 'READY_FOR_NEXT_ROUND': return applyReadyForNextRound(state, cmd)
     case 'DISCARD':     return applyDiscard(state, cmd)
     case 'PLAY':        return applyPlay(state, cmd)
     case 'FOLD':        return applyFold(state, cmd)
@@ -222,7 +246,7 @@ function endHand(
 
   const sweptCards = state.currentTopPlay?.cards ?? []
 
-  return {
+  const next: GameState = {
     ...state,
     players: resetPlayers,
     currentTopPlay: null,
@@ -233,6 +257,7 @@ function endHand(
     turnPhase: 'discard',
     middlePile: [...state.middlePile, ...sweptCards],
   }
+  return winnerId ? withEvents(next, { type: 'hand_won', playerId: winnerId }) : next
 }
 
 function endRound(state: GameState, players: PlayerState[], winnerId: string): GameState {
@@ -289,6 +314,11 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
     pointsThresholdAction === 'end_game' &&
     Object.values(scores).some(s => s >= threshold)
 
+  // Newly eliminated this round → emit one 'eliminated' event each.
+  const newlyEliminated = updatedPlayers
+    .filter(p => p.eliminated && !players.find(prev => prev.id === p.id)?.eliminated)
+    .map(p => ({ type: 'eliminated' as const, playerId: p.id }))
+
   // Game-end conditions:
   //  - chips / points-eliminate: ≤1 non-eliminated player remains
   //  - points-end_game: any player hit the threshold this round
@@ -307,7 +337,7 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
     } else {
       gameWinnerId = remaining[0]?.id ?? null
     }
-    return {
+    const next: GameState = {
       ...state,
       players: updatedPlayers,
       phase: 'game_end',
@@ -316,9 +346,15 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
       scores,
       roundScoreDelta: delta,
     }
+    return withEvents(
+      next,
+      { type: 'round_won', playerId: winnerId, emptied: true },
+      ...newlyEliminated,
+      ...(gameWinnerId ? [{ type: 'game_won' as const, playerId: gameWinnerId }] : []),
+    )
   }
 
-  return {
+  const next: GameState = {
     ...state,
     players: updatedPlayers,
     phase: 'round_end',
@@ -326,6 +362,11 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
     scores,
     roundScoreDelta: delta,
   }
+  return withEvents(
+    next,
+    { type: 'round_won', playerId: winnerId, emptied: true },
+    ...newlyEliminated,
+  )
 }
 
 // ============================================================
@@ -336,6 +377,7 @@ function applyAddPlayer(
   state: GameState,
   cmd: { playerId: string; playerName: string },
   isBot: boolean,
+  difficulty?: BotDifficulty,
 ): GameState {
   if (state.phase !== 'lobby') return state
   if (state.players.length >= 4) return state
@@ -357,13 +399,17 @@ function applyAddPlayer(
     connected: true,
     eliminated: false,
     isBot,
+    botDifficulty: isBot ? (difficulty ?? DEFAULT_BOT_DIFFICULTY) : undefined,
   }
 
-  return {
-    ...state,
-    players: [...state.players, newPlayer],
-    scores: { ...state.scores, [cmd.playerId]: 0 },
-  }
+  return withEvents(
+    {
+      ...state,
+      players: [...state.players, newPlayer],
+      scores: { ...state.scores, [cmd.playerId]: 0 },
+    },
+    { type: 'joined', playerId: cmd.playerId, playerName: cmd.playerName, isBot },
+  )
 }
 
 function applyRemoveBot(state: GameState, cmd: { playerId: string }): GameState {
@@ -375,6 +421,16 @@ function applyRemoveBot(state: GameState, cmd: { playerId: string }): GameState 
     players: state.players.filter(p => p.id !== cmd.playerId),
     scores: Object.fromEntries(Object.entries(state.scores).filter(([id]) => id !== cmd.playerId)),
   }
+}
+
+function applySetBotDifficulty(
+  state: GameState,
+  cmd: { playerId: string; difficulty: BotDifficulty },
+): GameState {
+  if (state.phase !== 'lobby') return state
+  const target = state.players.find(p => p.id === cmd.playerId)
+  if (!target || !target.isBot) return state
+  return updatePlayer(state, { ...target, botDifficulty: cmd.difficulty })
 }
 
 function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> }): GameState {
@@ -401,24 +457,47 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
   const scores: Record<string, number> = {}
   for (const p of players) scores[p.id] = initialScore
 
-  return {
-    ...state,
-    phase: 'playing',
-    players,
-    playerOrder,
-    currentPlayerIndex: 0,
-    leadPlayerIndex: 0,
-    turnPhase: 'discard',
-    currentTopPlay: null,
-    currentTopPlayerId: null,
-    currentHandPlays: [],
-    middlePile: [],
-    roundWinnerId: null,
-    scores,
-    roundScoreDelta: {},
-    deckCount: effectiveDeckCount(options, players.length),
-    options,
-  }
+  return withEvents(
+    {
+      ...state,
+      phase: 'playing',
+      players,
+      playerOrder,
+      currentPlayerIndex: 0,
+      leadPlayerIndex: 0,
+      turnPhase: 'discard',
+      currentTopPlay: null,
+      currentTopPlayerId: null,
+      currentHandPlays: [],
+      middlePile: [],
+      roundWinnerId: null,
+      scores,
+      roundScoreDelta: {},
+      deckCount: effectiveDeckCount(options, players.length),
+      options,
+      nextRoundReady: {},
+    },
+    { type: 'game_started' },
+  )
+}
+
+// Mark a player as ready for the next round. When every connected, non-eliminated
+// human is ready, automatically transition. Bots are not gated on (they're always
+// effectively ready) and disconnected humans are skipped to avoid deadlock.
+function applyReadyForNextRound(
+  state: GameState,
+  cmd: { playerId: string },
+): GameState {
+  if (state.phase !== 'round_end') return state
+  const player = state.players.find(p => p.id === cmd.playerId)
+  if (!player || player.eliminated) return state
+
+  const ready = { ...(state.nextRoundReady ?? {}), [cmd.playerId]: true }
+  const next: GameState = { ...state, nextRoundReady: ready }
+
+  const required = state.players.filter(p => !p.isBot && !p.eliminated && p.connected)
+  const allReady = required.every(p => ready[p.id])
+  return allReady ? applyNextRound(next) : next
 }
 
 function applyNextRound(state: GameState): GameState {
@@ -444,22 +523,26 @@ function applyNextRound(state: GameState): GameState {
   const winnerIndex = state.roundWinnerId ? newPlayerOrder.indexOf(state.roundWinnerId) : -1
   const leadIndex = winnerIndex !== -1 ? (winnerIndex + 1) % newPlayerOrder.length : 0
 
-  return {
-    ...state,
-    phase: 'playing',
-    players,
-    playerOrder: newPlayerOrder,
-    currentPlayerIndex: leadIndex,
-    leadPlayerIndex: leadIndex,
-    turnPhase: 'discard',
-    currentTopPlay: null,
-    currentTopPlayerId: null,
-    currentHandPlays: [],
-    middlePile: [],
-    roundWinnerId: null,
-    // Personal mode's effective deck count tracks playerCount, which can shrink after eliminations.
-    deckCount: effectiveDeckCount(state.options, activePlayers.length),
-  }
+  return withEvents(
+    {
+      ...state,
+      phase: 'playing',
+      players,
+      playerOrder: newPlayerOrder,
+      currentPlayerIndex: leadIndex,
+      leadPlayerIndex: leadIndex,
+      turnPhase: 'discard',
+      currentTopPlay: null,
+      currentTopPlayerId: null,
+      currentHandPlays: [],
+      middlePile: [],
+      roundWinnerId: null,
+      // Personal mode's effective deck count tracks playerCount, which can shrink after eliminations.
+      deckCount: effectiveDeckCount(state.options, activePlayers.length),
+      nextRoundReady: {},
+    },
+    { type: 'round_started' },
+  )
 }
 
 function applyDiscard(
@@ -490,7 +573,9 @@ function applyDiscard(
   const { drawn, remaining } = drawFromTop(deckWithDiscards, needed)
 
   const updated = { ...player, hand: [...newHand, ...drawn], deck: remaining }
-  return { ...updatePlayer(state, updated), turnPhase: 'play' }
+  const next = { ...updatePlayer(state, updated), turnPhase: 'play' as const }
+  if (cmd.cards.length === 0) return next
+  return withEvents(next, { type: 'discarded', playerId: cmd.playerId, count: cmd.cards.length })
 }
 
 function applyPlay(
@@ -520,29 +605,41 @@ function applyPlay(
   const newHandPlay: HandPlay = { hand: evaluatedHand, playerId: cmd.playerId }
   const updatedHandPlays = [...state.currentHandPlays, newHandPlay]
 
+  const playedEvent = { type: 'played' as const, playerId: cmd.playerId, category: evaluatedHand.category, cards: evaluatedHand.cards }
+
   // Round end: player emptied all their cards
   if (replenished.hand.length === 0 && replenished.deck.length === 0) {
-    return endRound({ ...state, currentTopPlay: evaluatedHand, currentTopPlayerId: cmd.playerId, currentHandPlays: updatedHandPlays }, players, cmd.playerId)
+    const stateWithPlay = withEvents(
+      { ...state, players, currentTopPlay: evaluatedHand, currentTopPlayerId: cmd.playerId, currentHandPlays: updatedHandPlays },
+      playedEvent,
+    )
+    return endRound(stateWithPlay, players, cmd.playerId)
   }
 
   // Hand end: all other players have already folded
   const active = players.filter(p => !p.folded)
   if (active.length === 1 && active[0].id === cmd.playerId) {
-    const nextState = { ...state, players, currentTopPlay: evaluatedHand, currentTopPlayerId: cmd.playerId, currentHandPlays: updatedHandPlays }
+    const nextState = withEvents(
+      { ...state, players, currentTopPlay: evaluatedHand, currentTopPlayerId: cmd.playerId, currentHandPlays: updatedHandPlays },
+      playedEvent,
+    )
     return endHand(nextState, players, cmd.playerId)
   }
 
   // Continue — advance to next active player
   const nextIndex = nextActiveIndex({ ...state, players }, state.currentPlayerIndex)
-  return {
-    ...state,
-    players,
-    currentTopPlay: evaluatedHand,
-    currentTopPlayerId: cmd.playerId,
-    currentHandPlays: updatedHandPlays,
-    currentPlayerIndex: nextIndex,
-    turnPhase: 'discard',
-  }
+  return withEvents(
+    {
+      ...state,
+      players,
+      currentTopPlay: evaluatedHand,
+      currentTopPlayerId: cmd.playerId,
+      currentHandPlays: updatedHandPlays,
+      currentPlayerIndex: nextIndex,
+      turnPhase: 'discard',
+    },
+    playedEvent,
+  )
 }
 
 function applyFold(state: GameState, cmd: { playerId: string }): GameState {
@@ -556,20 +653,25 @@ function applyFold(state: GameState, cmd: { playerId: string }): GameState {
   const players = state.players.map(p => p.id === cmd.playerId ? { ...p, folded: true } : p)
   const active = players.filter(p => !p.folded)
 
+  const foldedEvent = { type: 'folded' as const, playerId: cmd.playerId }
+
   // Hand ends when ≤1 player remains un-folded
   if (active.length <= 1) {
     // Winner is whoever made the last play; null if no play was made this hand
-    return endHand({ ...state, players }, players, state.currentTopPlayerId)
+    return endHand(withEvents({ ...state, players }, foldedEvent), players, state.currentTopPlayerId)
   }
 
   // Continue to next active player
   const nextIndex = nextActiveIndex({ ...state, players }, state.currentPlayerIndex)
-  return {
-    ...state,
-    players,
-    currentPlayerIndex: nextIndex,
-    turnPhase: 'discard',
-  }
+  return withEvents(
+    {
+      ...state,
+      players,
+      currentPlayerIndex: nextIndex,
+      turnPhase: 'discard',
+    },
+    foldedEvent,
+  )
 }
 
 function applyDebugSetHand(state: GameState, cmd: { playerId: string; count: number }): GameState {
@@ -587,18 +689,26 @@ function applyLeave(state: GameState, cmd: { playerId: string }): GameState {
   if (!player) return state
   if (state.phase === 'game_end' || state.phase === 'abandoned') return state
 
+  const leftEvent = { type: 'left' as const, playerId: cmd.playerId }
+
   if (state.phase === 'lobby') {
     // Remove from lobby entirely
-    return {
-      ...state,
-      players: state.players.filter(p => p.id !== cmd.playerId),
-      scores: Object.fromEntries(Object.entries(state.scores).filter(([id]) => id !== cmd.playerId)),
-    }
+    return withEvents(
+      {
+        ...state,
+        players: state.players.filter(p => p.id !== cmd.playerId),
+        scores: Object.fromEntries(Object.entries(state.scores).filter(([id]) => id !== cmd.playerId)),
+      },
+      leftEvent,
+    )
   }
 
-  // In-game: eliminate the player and remove from turn order
+  // In-game: eliminate the player, clear their cards (they took their seat with them),
+  // and remove from turn order. Without clearing, spectator views still render their hand/deck.
   const players = state.players.map(p =>
-    p.id === cmd.playerId ? { ...p, eliminated: true, folded: true, connected: false } : p
+    p.id === cmd.playerId
+      ? { ...p, eliminated: true, folded: true, connected: false, hand: [], deck: [] }
+      : p
   )
 
   const leavingOrderIdx = state.playerOrder.indexOf(cmd.playerId)
@@ -607,17 +717,21 @@ function applyLeave(state: GameState, cmd: { playerId: string }): GameState {
   // If ≤1 active player remains, end the game
   if (newPlayerOrder.length <= 1) {
     const gameWinnerId = newPlayerOrder[0] ?? null
-    return {
-      ...state,
-      players,
-      playerOrder: newPlayerOrder,
-      phase: 'game_end',
-      gameWinnerId,
-    }
+    return withEvents(
+      {
+        ...state,
+        players,
+        playerOrder: newPlayerOrder,
+        phase: 'game_end',
+        gameWinnerId,
+      },
+      leftEvent,
+      ...(gameWinnerId ? [{ type: 'game_won' as const, playerId: gameWinnerId }] : []),
+    )
   }
 
   if (state.phase === 'round_end') {
-    return { ...state, players, playerOrder: newPlayerOrder }
+    return withEvents({ ...state, players, playerOrder: newPlayerOrder }, leftEvent)
   }
 
   // phase === 'playing': fix turn indices
@@ -647,17 +761,23 @@ function applyLeave(state: GameState, cmd: { playerId: string }): GameState {
       : (state.currentTopPlayerId && newPlayerOrder.includes(state.currentTopPlayerId)
           ? state.currentTopPlayerId
           : null)
-    const stateForEnd = { ...state, players, playerOrder: newPlayerOrder, leadPlayerIndex: newLeadIndex }
+    const stateForEnd = withEvents(
+      { ...state, players, playerOrder: newPlayerOrder, leadPlayerIndex: newLeadIndex },
+      leftEvent,
+    )
     return endHand(stateForEnd, players, handWinnerId)
   }
 
-  return {
-    ...state,
-    players,
-    playerOrder: newPlayerOrder,
-    currentPlayerIndex: newCurrentIndex,
-    leadPlayerIndex: newLeadIndex,
-  }
+  return withEvents(
+    {
+      ...state,
+      players,
+      playerOrder: newPlayerOrder,
+      currentPlayerIndex: newCurrentIndex,
+      leadPlayerIndex: newLeadIndex,
+    },
+    leftEvent,
+  )
 }
 
 function applyReconnect(state: GameState, cmd: { playerId: string }): GameState {

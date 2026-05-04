@@ -7,10 +7,10 @@ import type * as Party from 'partykit/server'
 import type { GameAction, GameEvent } from '../src/transport/types'
 import { applyCommand, buildClientState, initialState } from '../shared/engine/state-machine'
 import type { GameState } from '../shared/engine/game-state'
-import { chooseBotMove } from '../shared/engine/bot-ismcts'
+import { DEFAULT_BOT_DIFFICULTY } from '../shared/engine/game-state'
+import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
 
 const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
-const BOT_TIME_BUDGET_MS = 1200    // ISMCTS wall-clock cap per decision
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
 
 export default class GameParty implements Party.Server {
@@ -21,9 +21,16 @@ export default class GameParty implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
   // Restore persisted state when the room wakes from hibernation.
+  // Coerce missing fields to defaults so older snapshots survive engine schema additions.
   async onStart() {
     const stored = await this.room.storage.get<GameState>('state')
-    if (stored) this.state = stored
+    if (stored) {
+      this.state = {
+        ...stored,
+        events: stored.events ?? [],
+        nextRoundReady: stored.nextRoundReady ?? {},
+      }
+    }
   }
 
   // Fires when 24h have passed with no broadcastState() call. Wipes the room
@@ -71,7 +78,12 @@ export default class GameParty implements Party.Server {
         const usedNames = new Set(this.state.players.map(p => p.name))
         const presets = ['CPU Alice', 'CPU Bob', 'CPU Carol', 'CPU Dave']
         const name = presets.find(n => !usedNames.has(n)) ?? `CPU ${this.state.players.length + 1}`
-        this.state = applyCommand(this.state, { type: 'ADD_BOT', playerId: botId, playerName: name })
+        this.state = applyCommand(this.state, {
+          type: 'ADD_BOT',
+          playerId: botId,
+          playerName: name,
+          difficulty: action.difficulty ?? DEFAULT_BOT_DIFFICULTY,
+        })
         break
       }
 
@@ -79,12 +91,20 @@ export default class GameParty implements Party.Server {
         this.state = applyCommand(this.state, { type: 'REMOVE_BOT', playerId: action.playerId })
         break
 
+      case 'SET_BOT_DIFFICULTY':
+        this.state = applyCommand(this.state, {
+          type: 'SET_BOT_DIFFICULTY',
+          playerId: action.playerId,
+          difficulty: action.difficulty,
+        })
+        break
+
       case 'START_GAME':
         this.state = applyCommand(this.state, { type: 'START_GAME', options: action.options })
         break
 
-      case 'NEXT_ROUND':
-        this.state = applyCommand(this.state, { type: 'NEXT_ROUND' })
+      case 'READY_FOR_NEXT_ROUND':
+        this.state = applyCommand(this.state, { type: 'READY_FOR_NEXT_ROUND', playerId: sender.id })
         break
 
       case 'DISCARD':
@@ -195,7 +215,8 @@ export default class GameParty implements Party.Server {
     const player = this.state.players.find(p => p.id === botId)
     if (!player || !player.isBot) return
 
-    const decision = chooseBotMove(this.state, botId, { timeBudgetMs: BOT_TIME_BUDGET_MS })
+    const difficulty = player.botDifficulty ?? DEFAULT_BOT_DIFFICULTY
+    const decision = chooseBotMove(this.state, botId, presetForDifficulty(difficulty))
 
     // DISCARD then PLAY/FOLD — the state machine validates each step.
     this.state = applyCommand(this.state, { type: 'DISCARD', playerId: botId, cards: decision.discard })

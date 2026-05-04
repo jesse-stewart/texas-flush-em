@@ -1,16 +1,28 @@
 import type { PlayerView } from '@shared/engine/state-machine'
 import type { PlayerPresence } from '../../transport/presence'
 import type { Card as CardType } from '@shared/engine/card'
+import type { BotDifficulty, GameEvent } from '@shared/engine/game-state'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
+import { EventBubble } from './EventBubble'
+
+// Color-coded by strength so the table at a glance shows who's the threat.
+const DIFFICULTY_BADGE: Record<BotDifficulty, { label: string; bg: string; fg: string }> = {
+  easy:   { label: 'Easy',   bg: 'rgba(96, 165, 250, 0.18)', fg: '#93c5fd' },
+  medium: { label: 'Medium', bg: 'rgba(167, 139, 250, 0.18)', fg: '#c4b5fd' },
+  hard:   { label: 'Hard',   bg: 'rgba(248, 113, 113, 0.20)', fg: '#fca5a5' },
+}
 
 interface OpponentAreaProps {
   opponents: PlayerView[]
+  allPlayers: PlayerView[]
+  myPlayerId: string
   currentPlayerId: string | null
   presence: Map<string, PlayerPresence>
+  events: GameEvent[]
 }
 
-export function OpponentArea({ opponents, currentPlayerId, presence }: OpponentAreaProps) {
+export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, presence, events }: OpponentAreaProps) {
   if (opponents.length === 0) return null
 
   return (
@@ -21,6 +33,9 @@ export function OpponentArea({ opponents, currentPlayerId, presence }: OpponentA
           player={p}
           isActive={p.id === currentPlayerId}
           presence={presence.get(p.id) ?? null}
+          events={events}
+          myPlayerId={myPlayerId}
+          allPlayers={allPlayers}
         />
       ))}
     </div>
@@ -35,11 +50,14 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
 }))
 
 function OpponentSeat({
-  player, isActive, presence,
+  player, isActive, presence, events, myPlayerId, allPlayers,
 }: {
   player: PlayerView
   isActive: boolean
   presence: PlayerPresence | null
+  events: GameEvent[]
+  myPlayerId: string
+  allPlayers: PlayerView[]
 }) {
   const handCount = player.handSize
   const deckCount = player.deckSize
@@ -55,14 +73,37 @@ function OpponentSeat({
   const fakeCards = handOrder.map((_, i) => FAKE_CARDS[i % 52])
   const selectedIndices = presence?.selectedPositions ?? []
 
+  // A human who left mid-game is eliminated + disconnected; eliminated-by-score humans stay connected.
+  const hasLeft = player.eliminated && !player.isBot && !player.isConnected
+
   return (
-    <div style={styles.seat}>
+    <div style={{ ...styles.seat, opacity: hasLeft ? 0.5 : 1 }}>
+      <EventBubble
+        events={events}
+        playerId={player.id}
+        myPlayerId={myPlayerId}
+        players={allPlayers}
+        isCurrentTurn={isActive}
+      />
       <div style={styles.nameRow}>
         <span style={{ ...styles.dot, backgroundColor: player.isConnected ? '#4ade80' : '#6b7280' }} />
         <span style={{ ...styles.name, color: isActive ? '#fde68a' : '#e5e7eb' }}>
           {player.name}
-          {player.folded && <span style={styles.foldedTag}> · folded</span>}
+          {hasLeft && <span style={styles.foldedTag}> · left</span>}
+          {!hasLeft && player.eliminated && <span style={styles.foldedTag}> · out</span>}
+          {!player.eliminated && player.folded && <span style={styles.foldedTag}> · folded</span>}
         </span>
+        {player.isBot && player.botDifficulty && (
+          <span
+            style={{
+              ...styles.difficultyBadge,
+              backgroundColor: DIFFICULTY_BADGE[player.botDifficulty].bg,
+              color: DIFFICULTY_BADGE[player.botDifficulty].fg,
+            }}
+          >
+            {DIFFICULTY_BADGE[player.botDifficulty].label}
+          </span>
+        )}
       </div>
 
       <div style={styles.piles}>
@@ -136,6 +177,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 400,
     color: '#9ca3af',
+  },
+  difficultyBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    padding: '2px 6px',
+    borderRadius: 4,
   },
   piles: {
     display: 'flex',

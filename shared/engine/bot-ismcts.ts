@@ -15,9 +15,41 @@
 
 import type { Card } from './card'
 import { createMultiDeck } from './deck'
-import type { GameState } from './game-state'
+import type { GameState, BotDifficulty } from './game-state'
 import { applyCommand } from './state-machine'
 import { generatePlays, chooseDiscard } from './bot-moves'
+
+// ============================================================
+// Difficulty presets — map BotDifficulty → ISMCTS knobs.
+// "randomActionProb" is a post-search override: with that probability the bot
+// picks a uniformly random legal action instead of the searched best, which
+// makes weak bots feel beatable rather than just slow.
+// ============================================================
+
+interface DifficultyPreset {
+  iterations: number
+  timeBudgetMs: number
+  rolloutTurnLimit: number
+  explorationC: number
+  randomActionProb: number
+}
+
+const DIFFICULTY_PRESETS: Record<BotDifficulty, DifficultyPreset> = {
+  easy:   { iterations: 1500,  timeBudgetMs: 150,  rolloutTurnLimit: 30, explorationC: Math.SQRT2, randomActionProb: 0.3 },
+  medium: { iterations: 8000,  timeBudgetMs: 700,  rolloutTurnLimit: 40, explorationC: Math.SQRT2, randomActionProb: 0 },
+  hard:   { iterations: 20000, timeBudgetMs: 3000, rolloutTurnLimit: 60, explorationC: 1.0,        randomActionProb: 0 },
+}
+
+export function presetForDifficulty(difficulty: BotDifficulty): IsmctsConfig {
+  const p = DIFFICULTY_PRESETS[difficulty]
+  return {
+    iterations: p.iterations,
+    timeBudgetMs: p.timeBudgetMs,
+    rolloutTurnLimit: p.rolloutTurnLimit,
+    explorationC: p.explorationC,
+    randomActionProb: p.randomActionProb,
+  }
+}
 
 // ============================================================
 // Public API
@@ -42,6 +74,7 @@ export interface IsmctsConfig {
   timeBudgetMs?: number     // wall-clock cap (default 1500ms)
   rolloutTurnLimit?: number // max plies per random rollout (default 40)
   explorationC?: number     // UCB1 exploration constant (default sqrt(2))
+  randomActionProb?: number // 0-1: probability of overriding the search with a random legal action (easy mode)
   randomSeed?: number       // for reproducibility in tests
 }
 
@@ -55,6 +88,7 @@ export function chooseBotMove(
     timeBudgetMs: config.timeBudgetMs ?? 1500,
     rolloutTurnLimit: config.rolloutTurnLimit ?? 40,
     explorationC: config.explorationC ?? Math.SQRT2,
+    randomActionProb: config.randomActionProb ?? 0,
   }
   const rng = makeRng(config.randomSeed ?? Math.floor(Math.random() * 0xffffffff))
 
@@ -88,6 +122,12 @@ export function chooseBotMove(
     chosen = found ?? realActions[0] ?? { type: 'FOLD', cards: [] }
   } else {
     chosen = realActions[0] ?? { type: 'FOLD', cards: [] }
+  }
+
+  // Easy-mode override: occasionally swap the searched best for a random legal action.
+  // This is the difference between "weak because it didn't think long" and "weak because it sometimes plays badly".
+  if (cfg.randomActionProb > 0 && realActions.length > 1 && rng() < cfg.randomActionProb) {
+    chosen = realActions[Math.floor(rng() * realActions.length)]
   }
 
   // Compute the discard the same way ISMCTS internally would.

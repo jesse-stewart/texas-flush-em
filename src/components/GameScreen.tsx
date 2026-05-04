@@ -11,6 +11,7 @@ import { TableCenter } from './Game/TableCenter'
 import { ActionBar } from './Game/ActionBar'
 import { PlayerHand } from './Game/PlayerHand'
 import { DebugPanel } from './Game/DebugPanel'
+import { EventBubble } from './Game/EventBubble'
 
 interface GameScreenProps {
   state: ClientGameState
@@ -202,7 +203,14 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       </div>
 
       <LayoutGroup>
-        <OpponentArea opponents={opponents} currentPlayerId={state.currentPlayerId} presence={presence} />
+        <OpponentArea
+          opponents={opponents}
+          allPlayers={state.players}
+          myPlayerId={myPlayerId}
+          currentPlayerId={state.currentPlayerId}
+          presence={presence}
+          events={state.events}
+        />
 
         <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
 
@@ -229,6 +237,16 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         />
       </LayoutGroup>
 
+      <div style={styles.selfBubbleOverlay}>
+        <EventBubble
+          events={state.events}
+          playerId={myPlayerId}
+          myPlayerId={myPlayerId}
+          players={state.players}
+          isCurrentTurn={state.currentPlayerId === myPlayerId}
+        />
+      </div>
+
       {import.meta.env.DEV && (
         <DebugPanel state={state} myPlayerId={myPlayerId} send={send} />
       )}
@@ -245,6 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#0f4c2a',
     fontFamily: 'system-ui, sans-serif',
     overflow: 'hidden',
+    position: 'relative',
   },
   header: {
     display: 'flex',
@@ -299,5 +318,17 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'transparent',
     color: '#9ca3af',
     cursor: 'pointer',
+  },
+  // Floats above the player's cards near the bottom of the screen, mirroring how
+  // opponent bubbles sit above each opponent's seat.
+  selfBubbleOverlay: {
+    position: 'absolute',
+    bottom: 240,
+    left: 0,
+    right: 0,
+    display: 'flex',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+    zIndex: 10,
   },
 }

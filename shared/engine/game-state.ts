@@ -1,10 +1,29 @@
 import type { Card } from './card'
-import type { EvaluatedHand } from './hand-eval'
+import type { EvaluatedHand, HandCategory } from './hand-eval'
 
 export interface HandPlay {
   hand: EvaluatedHand
   playerId: string
 }
+
+// ============================================================
+// Game event log — chronological record of everything that happened.
+// Drives per-player "speech bubble" notifications during play and the
+// reviewable game log shown at game end.
+// ============================================================
+
+export type GameEvent =
+  | { ts: number; type: 'game_started' }
+  | { ts: number; type: 'round_started' }
+  | { ts: number; type: 'discarded'; playerId: string; count: number }
+  | { ts: number; type: 'played'; playerId: string; category: HandCategory; cards: Card[] }
+  | { ts: number; type: 'folded'; playerId: string }
+  | { ts: number; type: 'hand_won'; playerId: string }
+  | { ts: number; type: 'round_won'; playerId: string; emptied: boolean }
+  | { ts: number; type: 'eliminated'; playerId: string }
+  | { ts: number; type: 'game_won'; playerId: string }
+  | { ts: number; type: 'joined'; playerId: string; playerName: string; isBot: boolean }
+  | { ts: number; type: 'left'; playerId: string }
 
 // ============================================================
 // Game options — chosen in the lobby, frozen when the game starts
@@ -17,6 +36,10 @@ export type PointsThresholdAction = 'eliminate' | 'end_game'
 // personal  — each player has their own private deck of `cardsPerPlayer` cards
 // mixed     — `mixedDeckCount` 52-card decks shuffled together; each player dealt `cardsPerPlayer`
 export type DealMode = 'classic' | 'personal' | 'mixed'
+
+// Per-bot strength setting. Mapped to ISMCTS knobs in bot-ismcts.ts.
+export type BotDifficulty = 'easy' | 'medium' | 'hard'
+export const DEFAULT_BOT_DIFFICULTY: BotDifficulty = 'medium'
 
 export interface GameOptions {
   scoringMode: ScoringMode
@@ -54,6 +77,7 @@ export interface PlayerState {
   connected: boolean
   eliminated: boolean // reached 52+ cumulative points or left the game
   isBot: boolean     // server-controlled CPU player; no real WebSocket connection
+  botDifficulty?: BotDifficulty  // bots only; undefined for humans
 }
 
 export interface GameState {
@@ -78,6 +102,12 @@ export interface GameState {
   //   classic = 1, mixed = mixedDeckCount, personal = playerCount (one private deck per player)
   deckCount: number
   options: GameOptions              // frozen at START_GAME
+  // Append-only event log for the entire game. Used for per-player notification bubbles
+  // and the end-of-game review. Lives in memory only (no persistence yet).
+  events: GameEvent[]
+  // Round-end consensus: which players have clicked "Start next round". Cleared on each
+  // round transition. Only humans gate the round; bots are auto-ready.
+  nextRoundReady: Record<string, boolean>
 }
 
 export function getCurrentPlayer(state: GameState): PlayerState | undefined {

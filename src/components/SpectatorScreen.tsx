@@ -19,7 +19,14 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         <button style={styles.leaveBtn} onClick={onLeave}>Leave</button>
       </div>
 
-      <OpponentArea opponents={state.players} currentPlayerId={state.currentPlayerId} presence={presence} />
+      <OpponentArea
+        opponents={state.players}
+        allPlayers={state.players}
+        myPlayerId=""
+        currentPlayerId={state.currentPlayerId}
+        presence={presence}
+        events={state.events}
+      />
 
       <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />
 
