@@ -32,3 +32,5 @@ coverage/
 
 # PartyKit
 .partykit/
+
+.env.local
