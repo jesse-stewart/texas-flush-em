@@ -37,7 +37,7 @@ export function MenuBar({ menus }: MenuBarProps) {
   }, [opened])
 
   return (
-    <ul ref={ref} className="r95_1txblt66" style={{ flex: 1 }}>
+    <ul ref={ref} className="r95_1txblt66" style={{ flexShrink: 0 }}>
       {menus.map(menu => {
         const active = opened === menu.name
         return (
