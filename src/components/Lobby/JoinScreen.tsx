@@ -116,7 +116,7 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            <Button onClick={handleSubmit} fullWidth>
+            <Button onClick={handleSubmit} primary fullWidth>
               {hasRoom ? 'Join game' : 'Create game'}
             </Button>
             {hasRoom && (
@@ -124,6 +124,9 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
                 Watch as spectator
               </Button>
             )}
+            <Button onClick={() => setRulesOpen(true)} size="sm" fullWidth>
+              Rules
+            </Button>
           </div>
         </div>
       </Frame>
