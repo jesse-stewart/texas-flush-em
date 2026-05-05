@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Frame, TitleBar, Button } from '@react95/core'
+import { Frame, TitleBar } from '@react95/core'
 import { RulesModal } from './RulesModal'
+import { CardBackPicker } from './CardBackPicker/CardBackPicker'
+import { MenuBar } from './MenuBar'
 import { LayoutGroup } from 'framer-motion'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameAction } from '../transport/types'
@@ -30,6 +32,7 @@ interface HandSlot { id: number; card: Card }
 export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave }: GameScreenProps) {
   const [selected, setSelected] = useState<number[]>([])
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [cardBackOpen, setCardBackOpen] = useState(false)
   const [cardOrder, setCardOrder] = useState<HandSlot[]>([])
   const [discardingCards, setDiscardingCards] = useState<HandSlot[]>([])
   const [myLastPlaySlotIds, setMyLastPlaySlotIds] = useState<number[] | null>(null)
@@ -186,7 +189,31 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         </TitleBar.OptionsBox>
       </TitleBar>
 
-      {/* Score bar — Win95 menubar style */}
+      {/* Win95 menu bar */}
+      <MenuBar
+        menus={[
+          {
+            name: '&Game',
+            items: [
+              { label: '&Leave game', onClick: onLeave },
+            ],
+          },
+          {
+            name: '&View',
+            items: [
+              { label: '&Card backs...', onClick: () => setCardBackOpen(true) },
+            ],
+          },
+          {
+            name: '&Help',
+            items: [
+              { label: '&Rules', onClick: () => setRulesOpen(true) },
+            ],
+          },
+        ]}
+      />
+
+      {/* Score bar */}
       <Frame
         bgColor="$material"
         px="$6"
@@ -206,10 +233,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
             {state.options.scoringMode === 'points' && `/${state.options.threshold}`}
           </span>
         ))}
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <Button onClick={() => setRulesOpen(true)} style={{ minWidth: 60 }}>Rules</Button>
-          <Button onClick={onLeave} style={{ minWidth: 60 }}>Leave</Button>
-        </span>
       </Frame>
 
       {/* Play area — green felt sunken into the window */}
@@ -277,6 +300,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         <DebugPanel state={state} myPlayerId={myPlayerId} send={send} />
       )}
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
     </Frame>
   )
 }

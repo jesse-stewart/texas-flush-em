@@ -1,10 +1,16 @@
+import { useEffect, useState } from 'react'
 import type { Card as CardType, Rank, Suit } from '@shared/engine/card'
+import { backFrameAt, getCardBack, subscribeAnimationTick } from '../../cardBacks'
+import { useCardBackId } from '../../contexts/CardBackContext'
 
 interface CardProps {
   card: CardType
   selected?: boolean
   faceDown?: boolean
   onClick?: () => void
+  // Optional override for the back. If omitted, uses the user's selected back
+  // from CardBackContext. Useful for the picker preview.
+  backIdOverride?: string
 }
 
 const CARD_W = 80
@@ -24,27 +30,54 @@ const RANK_COL: Record<string, number> = {
   '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
 }
 
-// Static back for now: palm tree at row 6, col 4 (zero-indexed: row 5, col 3)
-const BACK_ROW = 5
-const BACK_COL = 3
-
 const SPRITE_URL = '/cards.png'
 
-function spritePosition(row: number, col: number): React.CSSProperties {
+function spritePosition(row: number, col: number, w: number, h: number): React.CSSProperties {
   return {
     backgroundImage: `url(${SPRITE_URL})`,
-    backgroundSize: `${COLS * CARD_W}px ${ROWS * CARD_H}px`,
-    backgroundPosition: `-${col * CARD_W}px -${row * CARD_H}px`,
+    backgroundSize: `${COLS * w}px ${ROWS * h}px`,
+    backgroundPosition: `-${col * w}px -${row * h}px`,
     backgroundRepeat: 'no-repeat',
     imageRendering: 'pixelated',
   }
 }
 
-function faceSpritePosition(rank: Rank, suit: Suit): React.CSSProperties {
-  return spritePosition(SUIT_ROW[suit], RANK_COL[String(rank)])
+function faceSpritePosition(rank: Rank, suit: Suit, w: number, h: number): React.CSSProperties {
+  return spritePosition(SUIT_ROW[suit], RANK_COL[String(rank)], w, h)
 }
 
-export function Card({ card, selected = false, faceDown = false, onClick }: CardProps) {
+// Shared by Card and CardBackPicker so previews pick up animation too.
+export function CardBackVisual({
+  backId,
+  width = CARD_W,
+  height = CARD_H,
+}: { backId: string; width?: number; height?: number }) {
+  const back = getCardBack(backId)
+  const animated = !!back.animation
+  const [, force] = useState(0)
+  useEffect(() => {
+    if (!animated) return
+    return subscribeAnimationTick(() => force(n => n + 1))
+  }, [animated])
+
+  const cell = animated ? backFrameAt(back, Date.now()) : back.rest
+  return (
+    <div
+      style={{
+        width,
+        height,
+        flexShrink: 0,
+        ...spritePosition(cell.row, cell.col, width, height),
+      }}
+      aria-label={`card back: ${back.label}`}
+    />
+  )
+}
+
+export function Card({ card, selected = false, faceDown = false, onClick, backIdOverride }: CardProps) {
+  const userBackId = useCardBackId()
+  const backId = backIdOverride ?? userBackId
+
   const base: React.CSSProperties = {
     width: CARD_W,
     height: CARD_H,
@@ -59,16 +92,25 @@ export function Card({ card, selected = false, faceDown = false, onClick }: Card
       : '0 2px 6px rgba(0,0,0,0.18)',
   }
 
-  const sprite = faceDown
-    ? spritePosition(BACK_ROW, BACK_COL)
-    : faceSpritePosition(card.rank, card.suit)
+  if (faceDown) {
+    return (
+      <div
+        onClick={onClick}
+        role={onClick ? 'button' : undefined}
+        aria-label="face-down card"
+        style={base}
+      >
+        <CardBackVisual backId={backId} width={CARD_W} height={CARD_H} />
+      </div>
+    )
+  }
 
   return (
     <div
       onClick={onClick}
       role={onClick ? 'button' : undefined}
-      aria-label={faceDown ? 'face-down card' : `${card.rank} of ${card.suit}`}
-      style={{ ...base, ...sprite }}
+      aria-label={`${card.rank} of ${card.suit}`}
+      style={{ ...base, ...faceSpritePosition(card.rank, card.suit, CARD_W, CARD_H) }}
     />
   )
 }

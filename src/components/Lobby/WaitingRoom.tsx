@@ -3,6 +3,10 @@ import { Frame, TitleBar, Button, Input, Fieldset } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
 import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
+import { CardBackPicker } from '../CardBackPicker/CardBackPicker'
+import { CardBackVisual } from '../Card/Card'
+import { useCardBackId } from '../../contexts/CardBackContext'
+import { getCardBack } from '../../cardBacks'
 
 const SETTINGS_KEY = 'flushem_settings'
 
@@ -158,6 +162,9 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const canStart = state.players.length >= 2
   const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const cardBackId = useCardBackId()
+  const cardBack = getCardBack(cardBackId)
 
   const initial = useMemo(loadSettings, [])
   const [scoringMode, setScoringMode] = useState<GameOptions['scoringMode']>(initial.scoringMode)
@@ -312,6 +319,17 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                 </SettingRow>
               )}
 
+              <SettingRow label="Card back">
+                <Button
+                  onClick={() => setPickerOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px' }}
+                  aria-label={`Card back: ${cardBack.label}. Click to change.`}
+                >
+                  <CardBackVisual backId={cardBackId} width={20} height={28} />
+                  <span style={{ fontSize: 12 }}>{cardBack.label}…</span>
+                </Button>
+              </SettingRow>
+
               <SettingRow label="Deal mode">
                 <Segmented
                   options={[
@@ -388,6 +406,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
           </div>
         </div>
       </Frame>
+      {pickerOpen && <CardBackPicker onClose={() => setPickerOpen(false)} />}
     </div>
   )
 }
