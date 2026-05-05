@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Frame, TitleBar, Button } from '@react95/core'
+import { Frame, TitleBar } from '@react95/core'
+import { Button } from 'react95'
 import { CARD_BACKS } from '../../cardBacks'
 import { CardBackVisual } from '../Card/Card'
 import { useCardBackId, useSetCardBackId } from '../../contexts/CardBackContext'

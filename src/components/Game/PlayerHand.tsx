@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
-import { Frame, Button } from '@react95/core'
+import { Frame } from '@react95/core'
+import { Button } from 'react95'
 import type { Card as CardType } from '@shared/engine/card'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
+import { palette } from '../../palette'
 
 interface DiscardingSlot { id: number; card: CardType }
 
@@ -32,19 +34,18 @@ export function PlayerHand({
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
         flexShrink: 0,
         backgroundColor: 'transparent',
       }}
     >
       <div style={toolbarStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ fontWeight: 700, color: '#fff' }}>hand</span>
-          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: '#000' }}>
+          <span style={{ fontWeight: 700, color: palette.white }}>hand</span>
+          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: palette.black }}>
             {cards.length}
           </Frame>
-          <span style={{ fontWeight: 700, color: '#fff' }}>deck</span>
-          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: '#000' }}>
+          <span style={{ fontWeight: 700, color: palette.white }}>deck</span>
+          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: palette.black }}>
             {deckSize}
           </Frame>
           {isDealer && (
@@ -81,10 +82,10 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
         {count === 0 ? (
           <div style={{
             width: 80, height: 112,
-            border: '2px dashed rgba(255,255,255,0.25)',
+            border: `2px dashed ${palette.midGray}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ fontSize: 11, color: '#cfd6cf' }}>empty</span>
+            <span style={{ fontSize: 11, color: palette.ltGray }}>empty</span>
           </div>
         ) : (
           Array.from({ length: layers }).map((_, i) => (
@@ -110,7 +111,7 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
           </motion.div>
         ))}
       </div>
-      <span style={{ fontSize: 11, color: '#cfd6cf', fontWeight: 500 }}>{count} in deck</span>
+      <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{count} in deck</span>
     </div>
   )
 }
@@ -130,7 +131,7 @@ const toolbarStyle: React.CSSProperties = {
 const cardRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'flex-end',
-  justifyContent: 'center',
+  justifyContent: 'safe center',
   overflow: 'visible',
   gap: 12,
   marginTop: 32,
@@ -145,8 +146,8 @@ const dealerBadgeStyle: React.CSSProperties = {
   borderRadius: '50%',
   fontSize: 10,
   fontWeight: 700,
-  color: '#000',
-  backgroundColor: '#fde68a',
-  border: '1px solid #000',
+  color: palette.black,
+  backgroundColor: palette.dealerYellow,
+  border: `1px solid ${palette.black}`,
   marginLeft: 4,
 }

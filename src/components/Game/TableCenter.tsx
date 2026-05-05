@@ -4,6 +4,7 @@ import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
 import { HandCategory } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
+import { palette } from '../../palette'
 
 const CARD_HEIGHT = 112
 const STACK_OFFSET = CARD_HEIGHT * 0.1
@@ -96,10 +97,10 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
         style={{ textAlign: 'center', minWidth: 280 }}
       >
         {isMyTurn
-          ? <span style={{ color: '#a00000', fontSize: 12, fontWeight: 700 }}>
+          ? <span style={{ color: palette.lose, fontSize: 12, fontWeight: 700 }}>
               Your turn - {state.turnPhase === 'discard' ? 'select cards to discard, or skip' : 'play a hand or fold'}
             </span>
-          : <span style={{ color: '#000', fontSize: 12 }}>
+          : <span style={{ color: palette.black, fontSize: 12 }}>
               {currentPlayer?.name ?? '...'}&apos;s turn
             </span>
         }
@@ -112,7 +113,7 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
           {state.currentHandPlays.length === 0 ? (
             <div style={emptyPlayStyle}>
               <div style={emptyCircleStyle}>
-                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontStyle: 'italic' }}>
+                <span style={{ color: palette.ltGray, fontSize: 14, fontStyle: 'italic' }}>
                   Lead the hand
                 </span>
               </div>
@@ -126,10 +127,10 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
                 py="$1"
                 style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}
               >
-                <span style={{ color: '#000', fontSize: 13, fontWeight: 700 }}>
+                <span style={{ color: palette.black, fontSize: 13, fontWeight: 700 }}>
                   {CATEGORY_LABEL[state.currentTopPlay!.category]}
                 </span>
-                <span style={{ color: '#444', fontSize: 11 }}>by {topPlayer?.name ?? '?'}</span>
+                <span style={{ color: palette.vdkGray, fontSize: 11 }}>by {topPlayer?.name ?? '?'}</span>
               </Frame>
               <PlayStack plays={state.currentHandPlays} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
             </>

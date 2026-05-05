@@ -1,8 +1,10 @@
-import { Frame, TitleBar, Button } from '@react95/core'
+import { Frame, TitleBar, contract } from '@react95/core'
+import { Button } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { PlayerPresence } from '../transport/presence'
 import { OpponentArea } from './Game/OpponentArea'
 import { TableCenter } from './Game/TableCenter'
+import { palette } from '../palette'
 
 interface SpectatorScreenProps {
   state: ClientGameState
@@ -17,7 +19,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
       bgColor="$material"
       boxShadow="$out"
       p="$2"
-      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
+      style={{ height: '100dvh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' }}
     >
       <TitleBar title="Texas Flush'em - Spectating" active>
         <TitleBar.OptionsBox>
@@ -33,7 +35,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
           display: 'flex',
           gap: 12,
           alignItems: 'center',
-          borderBottom: '1px solid #868a8e',
+          borderBottom: `1px solid ${contract.colors.borderDark}`,
           flexShrink: 0,
           fontSize: 12,
         }}
@@ -50,8 +52,8 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#006300',
-          overflow: 'hidden',
+          backgroundColor: palette.felt,
+          overflow: 'auto',
           margin: 4,
         }}
       >
@@ -67,7 +69,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
 
         <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />
 
-        <div style={{ marginTop: 'auto', padding: 16, textAlign: 'center', fontSize: 11, color: '#cfd6cf', fontStyle: 'italic' }}>
+        <div style={{ marginTop: 'auto', padding: 16, textAlign: 'center', fontSize: 11, color: palette.ltGray, fontStyle: 'italic' }}>
           {eliminated ? "You've been eliminated - watching the rest of the game" : 'Game in progress - you joined late'}
         </div>
       </Frame>

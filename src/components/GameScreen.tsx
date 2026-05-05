@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Frame, TitleBar } from '@react95/core'
+import { Frame, TitleBar, contract } from '@react95/core'
+import { palette } from '../palette'
 import { RulesModal } from './RulesModal'
+import { AboutModal } from './AboutModal'
 import { CardBackPicker } from './CardBackPicker/CardBackPicker'
 import { MenuBar } from './MenuBar'
 import { LayoutGroup } from 'framer-motion'
@@ -32,6 +34,7 @@ interface HandSlot { id: number; card: Card }
 export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave }: GameScreenProps) {
   const [selected, setSelected] = useState<number[]>([])
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [cardBackOpen, setCardBackOpen] = useState(false)
   const [cardOrder, setCardOrder] = useState<HandSlot[]>([])
   const [discardingCards, setDiscardingCards] = useState<HandSlot[]>([])
@@ -173,10 +176,11 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       boxShadow="$out"
       p="$2"
       style={{
-        minHeight: '100vh',
+        height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
+        overflow: 'hidden',
       }}
     >
       <TitleBar
@@ -208,6 +212,8 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
             name: '&Help',
             items: [
               { label: '&Rules', onClick: () => setRulesOpen(true) },
+              { divider: true, label: '' },
+              { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
             ],
           },
         ]}
@@ -222,7 +228,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           display: 'flex',
           gap: 16,
           alignItems: 'center',
-          borderBottom: '1px solid #868a8e',
+          borderBottom: `1px solid ${contract.colors.borderDark}`,
           flexShrink: 0,
           fontSize: 12,
         }}
@@ -242,8 +248,8 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#006300',
-          overflow: 'hidden',
+          backgroundColor: palette.felt,
+          overflow: 'auto',
           position: 'relative',
           margin: 4,
         }}
@@ -300,6 +306,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         <DebugPanel state={state} myPlayerId={myPlayerId} send={send} />
       )}
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
     </Frame>
   )

@@ -2,6 +2,7 @@ import { Frame } from '@react95/core'
 import type { GameEvent } from '@shared/engine/game-state'
 import type { PlayerView } from '@shared/engine/state-machine'
 import { formatEvent } from './eventFormat'
+import { palette } from '../../palette'
 
 interface EventLogProps {
   events: GameEvent[]
@@ -24,10 +25,10 @@ export function EventLog({ events, players, myPlayerId }: EventLogProps) {
       <div style={{
         fontSize: 11,
         fontWeight: 700,
-        color: '#000',
+        color: palette.black,
         marginBottom: 6,
         paddingBottom: 4,
-        borderBottom: '1px solid #888',
+        borderBottom: `1px solid ${palette.midGray}`,
       }}>
         Game log
       </div>
@@ -46,7 +47,7 @@ export function EventLog({ events, players, myPlayerId }: EventLogProps) {
           return (
             <div key={i} style={isDivider ? dividerStyle : rowStyle}>
               <span style={{
-                color: '#666',
+                color: palette.dkGray,
                 fontFamily: 'monospace',
                 fontSize: 11,
                 minWidth: 32,
@@ -74,9 +75,9 @@ function relTime(ms: number): string {
 
 function toneColor(tone: 'neutral' | 'positive' | 'negative'): React.CSSProperties {
   switch (tone) {
-    case 'positive': return { color: '#080' }
-    case 'negative': return { color: '#a00' }
-    default: return { color: '#000' }
+    case 'positive': return { color: palette.win }
+    case 'negative': return { color: palette.lose }
+    default: return { color: palette.black }
   }
 }
 
@@ -92,7 +93,7 @@ const dividerStyle: React.CSSProperties = {
   alignItems: 'baseline',
   marginTop: 6,
   paddingTop: 4,
-  borderTop: '1px solid #aaa',
+  borderTop: `1px solid ${palette.midGray}`,
 }
 
 const textStyle: React.CSSProperties = {
@@ -101,6 +102,6 @@ const textStyle: React.CSSProperties = {
 
 const dividerTextStyle: React.CSSProperties = {
   fontWeight: 700,
-  color: '#000080',
+  color: palette.navy,
   fontSize: 11,
 }

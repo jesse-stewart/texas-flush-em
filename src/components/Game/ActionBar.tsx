@@ -1,7 +1,9 @@
-import { Frame, Button } from '@react95/core'
+import { Frame } from '@react95/core'
+import { Button } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { Card } from '@shared/engine/card'
 import { evaluateHand, beats, HandCategory } from '@shared/engine/hand-eval'
+import { palette } from '../../palette'
 
 const CATEGORY_LABEL: Record<number, string> = {
   [HandCategory.HIGH_CARD]: 'High Card',
@@ -80,10 +82,10 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
         fontSize: 12,
         textAlign: 'center',
         minHeight: 16,
-        color: !isMyTurn ? '#cfd6cf'
-          : canPlay ? '#86efac'
-          : isValidHand && !doesBeat ? '#fca5a5'
-          : '#e5e7eb',
+        color: !isMyTurn ? palette.ltGray
+          : canPlay ? palette.hintGood
+          : isValidHand && !doesBeat ? palette.hintBad
+          : palette.ltGray,
       }}>
         {hint}
       </span>

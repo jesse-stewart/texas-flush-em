@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Frame, TitleBar, Button, Input, Fieldset } from '@react95/core'
+import { useState, useMemo, useEffect } from 'react'
+import { Frame, TitleBar, Fieldset } from '@react95/core'
+import { Button, NumberInput, Select } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
 import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
@@ -7,6 +8,10 @@ import { CardBackPicker } from '../CardBackPicker/CardBackPicker'
 import { CardBackVisual } from '../Card/Card'
 import { useCardBackId } from '../../contexts/CardBackContext'
 import { getCardBack } from '../../cardBacks'
+import { palette } from '../../palette'
+import { RulesModal } from '../RulesModal'
+import { AboutModal } from '../AboutModal'
+import { MenuBar } from '../MenuBar'
 
 const SETTINGS_KEY = 'flushem_settings'
 
@@ -29,35 +34,14 @@ function NumberStepper({
   max?: number
   onChange: (v: number) => void
 }) {
-  const [draft, setDraft] = useState(String(value))
-  useEffect(() => { setDraft(String(value)) }, [value])
-
-  const clamp = (v: number) => {
-    if (max !== undefined) v = Math.min(max, v)
-    return Math.max(min, v)
-  }
-
-  function commit() {
-    const v = parseInt(draft, 10)
-    if (isNaN(v)) setDraft(String(value))
-    else onChange(clamp(v))
-  }
-
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <Button onClick={() => onChange(clamp(value - 1))} aria-label="decrease" style={{ minWidth: 24, padding: '0 6px' }}>−</Button>
-      <Input
-        type="number"
-        min={min}
-        max={max}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-        style={{ width: 56, textAlign: 'center' }}
-      />
-      <Button onClick={() => onChange(clamp(value + 1))} aria-label="increase" style={{ minWidth: 24, padding: '0 6px' }}>+</Button>
-    </div>
+    <NumberInput
+      value={value}
+      min={min}
+      max={max}
+      onChange={onChange}
+      width={80}
+    />
   )
 }
 
@@ -76,7 +60,7 @@ function Segmented<T extends string | number>({
           <Button
             key={String(opt.value)}
             onClick={() => onChange(opt.value)}
-            className={active ? 'r95-pressed' : undefined}
+            active={active}
             style={{ minWidth: 56 }}
           >
             {opt.label}
@@ -163,6 +147,8 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const cardBackId = useCardBackId()
   const cardBack = getCardBack(cardBackId)
 
@@ -218,8 +204,20 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
 
   return (
     <div style={pageStyle}>
-      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: 420 }}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: '100%', maxWidth: 420 }}>
         <TitleBar title="Texas Flush'em - Lobby" active />
+        <MenuBar
+          menus={[
+            {
+              name: '&Help',
+              items: [
+                { label: '&Rules', onClick: () => setRulesOpen(true) },
+                { divider: true, label: '' },
+                { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
+              ],
+            },
+          ]}
+        />
         <div style={{ padding: 12 }}>
 
           <Fieldset legend="Room">
@@ -231,7 +229,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
               <Button onClick={copyCode}>Copy</Button>
             </div>
             <div style={{ marginTop: 6 }}>
-              <Button onClick={copyLink} style={{ width: '100%' }}>
+              <Button onClick={copyLink} fullWidth>
                 {copied ? 'Link copied!' : password ? 'Copy invite link (incl. password)' : 'Copy invite link'}
               </Button>
             </div>
@@ -243,22 +241,22 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 4 }}>
               {state.players.map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, backgroundColor: p.isConnected ? '#0a0' : '#888', display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ width: 8, height: 8, backgroundColor: p.isConnected ? palette.win : palette.midGray, display: 'inline-block', flexShrink: 0 }} />
                   <span style={{ fontWeight: 700 }}>{p.name}</span>
-                  {p.id === myPlayerId && <span style={{ color: '#444' }}>(you)</span>}
-                  {p.isBot && <span style={{ background: '#000080', color: '#fff', padding: '0 4px', fontWeight: 700 }}>CPU</span>}
+                  {p.id === myPlayerId && <span style={{ color: palette.vdkGray }}>(you)</span>}
+                  {p.isBot && <span style={{ background: palette.navy, color: palette.white, padding: '0 4px', fontWeight: 700 }}>CPU</span>}
                   {p.isBot && (
                     <>
-                      <select
+                      <Select<BotDifficulty>
                         value={p.botDifficulty ?? DEFAULT_BOT_DIFFICULTY}
-                        onChange={e => onSetBotDifficulty(p.id, e.target.value as BotDifficulty)}
+                        onChange={selected => onSetBotDifficulty(p.id, selected.value)}
+                        options={(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => ({
+                          value: d, label: BOT_DIFFICULTY_LABELS[d],
+                        }))}
                         aria-label={`${p.name} difficulty`}
-                        style={{ marginLeft: 'auto', fontSize: 11 }}
-                      >
-                        {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
-                          <option key={d} value={d}>{BOT_DIFFICULTY_LABELS[d]}</option>
-                        ))}
-                      </select>
+                        width={90}
+                        style={{ marginLeft: 'auto' }}
+                      />
                       <Button onClick={() => onRemoveBot(p.id)} aria-label={`Remove ${p.name}`} style={{ minWidth: 22, padding: '0 4px' }}>×</Button>
                     </>
                   )}
@@ -268,7 +266,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                 <div key={`empty-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                   {i === 0 && canAddBot ? (
                     <>
-                      <span style={{ flex: 1, color: '#444' }}>+ Add CPU:</span>
+                      <span style={{ flex: 1, color: palette.vdkGray }}>+ Add CPU:</span>
                       {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
                         <Button key={d} onClick={() => onAddBot(d)} style={{ padding: '0 8px' }}>
                           {BOT_DIFFICULTY_LABELS[d]}
@@ -277,8 +275,8 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                     </>
                   ) : (
                     <>
-                      <span style={{ width: 8, height: 8, backgroundColor: '#bbb', display: 'inline-block', flexShrink: 0 }} />
-                      <span style={{ color: '#888', fontStyle: 'italic' }}>Waiting for player...</span>
+                      <span style={{ width: 8, height: 8, backgroundColor: palette.ltGray, display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ color: palette.midGray, fontStyle: 'italic' }}>Waiting for player...</span>
                     </>
                   )}
                 </div>
@@ -377,7 +375,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                     />
                   </SettingRow>
                   {effectiveMixedCards < mixedCards && (
-                    <p style={{ margin: 0, fontSize: 11, color: '#444', textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontSize: 11, color: palette.vdkGray, textAlign: 'right' }}>
                       Capped at {mixedMaxCards} (pool size / players).
                     </p>
                   )}
@@ -385,7 +383,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
               )}
 
               {estMin !== null && (
-                <p style={{ margin: 0, fontSize: 11, color: '#444', textAlign: 'right' }}>
+                <p style={{ margin: 0, fontSize: 11, color: palette.vdkGray, textAlign: 'right' }}>
                   Estimated game length: <b>{formatDuration(estMin)}</b>
                 </p>
               )}
@@ -393,7 +391,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
           </Fieldset>
 
           {!canStart && (
-            <p style={{ fontSize: 12, margin: '8px 0 4px', textAlign: 'center', color: '#444' }}>
+            <p style={{ fontSize: 12, margin: '8px 0 4px', textAlign: 'center', color: palette.vdkGray }}>
               Need at least 2 players to start.
             </p>
           )}
@@ -406,7 +404,22 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
           </div>
         </div>
       </Frame>
+
+      <div style={footerStyle}>
+        (c) {new Date().getFullYear()}{' '}
+        <a
+          href="https://jessestewart.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={footerLinkStyle}
+        >
+          Jesse Stewart
+        </a>
+      </div>
+
       {pickerOpen && <CardBackPicker onClose={() => setPickerOpen(false)} />}
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
     </div>
   )
 }
@@ -423,8 +436,22 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
 const pageStyle: React.CSSProperties = {
   minHeight: '100vh',
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
   padding: '20px 0',
+  gap: 16,
+}
+
+const footerStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: palette.white,
+  textShadow: '1px 1px 0 #000',
+  textAlign: 'center',
+}
+
+const footerLinkStyle: React.CSSProperties = {
+  color: palette.white,
+  textDecoration: 'underline',
 }
 

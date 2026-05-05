@@ -169,7 +169,7 @@ const styles: Record<string, React.CSSProperties> = {
   row: {
     display: 'flex',
     flexWrap: 'nowrap',
-    justifyContent: 'center',
+    justifyContent: 'safe center',
     alignItems: 'flex-end',
     paddingTop: 60,
     overflow: 'visible',

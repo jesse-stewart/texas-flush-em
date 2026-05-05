@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Frame, TitleBar, Button, Fieldset } from '@react95/core'
+import { Frame, TitleBar, Fieldset } from '@react95/core'
+import { Button, Hourglass } from 'react95'
+import { palette } from '../palette'
 import { useGame } from '../hooks/useGame'
 import { WaitingRoom } from './Lobby/WaitingRoom'
 import { GameScreen } from './GameScreen'
@@ -200,7 +202,7 @@ function RoundEndModal({
           <div style={{ fontSize: 16, fontWeight: 700 }}>
             {winner?.name ?? 'Someone'} wins the round!
           </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? '#080' : '#a00' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? palette.win : palette.lose }}>
             {isWinner ? 'No chips lost' : `-${myDelta} chips`}
           </div>
           <Button onClick={onNext} style={{ marginTop: 8, minWidth: 120 }}>
@@ -248,7 +250,7 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
                     <tr key={p.id} style={{ opacity: p.eliminated && !isGameWinner ? 0.5 : 1 }}>
                       <td style={{ paddingTop: 4, fontWeight: isMe ? 700 : 400 }}>
                         {p.name}
-                        {isGameWinner && <span style={{ marginLeft: 6, color: '#080', fontSize: 11 }}>winner</span>}
+                        {isGameWinner && <span style={{ marginLeft: 6, color: palette.win, fontSize: 11 }}>winner</span>}
                       </td>
                       <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>
                         {state.scores[p.id] ?? 0}
@@ -327,12 +329,12 @@ function RoundEndScreen({
                   const isMe = p.id === myPlayerId
                   const isRoundWinner = p.id === state.roundWinnerId
                   let deltaText = '-'
-                  let deltaColor = '#666'
+                  let deltaColor: string = palette.dkGray
                   if (isChips) {
-                    if (delta > 0) { deltaText = `+${delta}`; deltaColor = '#080' }
-                    else if (delta < 0) { deltaText = `${delta}`; deltaColor = '#a00' }
+                    if (delta > 0) { deltaText = `+${delta}`; deltaColor = palette.win }
+                    else if (delta < 0) { deltaText = `${delta}`; deltaColor = palette.lose }
                   } else {
-                    if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = '#a00' }
+                    if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = palette.lose }
                   }
                   const isRequired = !p.isBot && !p.eliminated && p.isConnected
                   const ready = !!state.nextRoundReady[p.id]
@@ -340,14 +342,14 @@ function RoundEndScreen({
                     <tr key={p.id} style={{ opacity: p.eliminated ? 0.5 : 1 }}>
                       <td style={{ paddingTop: 4, fontWeight: isMe ? 700 : 400 }}>
                         {p.name}
-                        {p.eliminated && <span style={{ marginLeft: 6, color: '#666', fontSize: 11 }}>out</span>}
+                        {p.eliminated && <span style={{ marginLeft: 6, color: palette.dkGray, fontSize: 11 }}>out</span>}
                         {isRequired && (
                           ready
-                            ? <span style={{ marginLeft: 6, color: '#080', fontSize: 11 }}>ready</span>
-                            : <span style={{ marginLeft: 6, color: '#666', fontSize: 11 }}>waiting...</span>
+                            ? <span style={{ marginLeft: 6, color: palette.win, fontSize: 11 }}>ready</span>
+                            : <Hourglass size={16} style={{ marginLeft: 6, verticalAlign: 'middle' }} />
                         )}
                       </td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', color: '#666' }}>{before}</td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', color: palette.dkGray }}>{before}</td>
                       <td style={{ paddingTop: 4, textAlign: 'right', color: deltaColor, fontWeight: 700 }}>
                         {deltaText}
                       </td>
@@ -360,7 +362,7 @@ function RoundEndScreen({
           </Fieldset>
 
           {isEliminated && (
-            <p style={{ color: '#a00', fontWeight: 700, margin: '8px 0', fontSize: 12 }}>
+            <p style={{ color: palette.lose, fontWeight: 700, margin: '8px 0', fontSize: 12 }}>
               You&apos;ve been eliminated - {isChips ? 'out of chips' : `${state.options.threshold} points reached`}.
             </p>
           )}
@@ -377,7 +379,7 @@ function RoundEndScreen({
               <Button onClick={onReady} style={{ minWidth: 160, fontWeight: 700 }}>Start next round</Button>
             )}
             {canReady && meReady && waitingFor.length > 0 && (
-              <span style={{ fontSize: 11, color: '#444' }}>
+              <span style={{ fontSize: 11, color: palette.vdkGray }}>
                 Ready - waiting for {waitingFor.map(p => p.name).join(', ')}
               </span>
             )}
@@ -403,24 +405,24 @@ function currentRoundEvents(events: ClientGameState['events']): ClientGameState[
 }
 
 const SUIT_SYMBOL: Record<string, string> = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' }
-const SUIT_COLOR: Record<string, string> = { clubs: '#000', diamonds: '#a00', hearts: '#a00', spades: '#000' }
+const SUIT_COLOR: Record<string, string> = { clubs: palette.black, diamonds: palette.lose, hearts: palette.lose, spades: palette.black }
 
 function fmt(card: Card) { return `${card.rank}${SUIT_SYMBOL[card.suit]}` }
 
 function CardList({ cards, label }: { cards: Card[]; label: string }) {
   return (
     <div style={{ marginBottom: 6 }}>
-      <span style={{ color: '#444', fontSize: 11, fontWeight: 700 }}>
+      <span style={{ color: palette.vdkGray, fontSize: 11, fontWeight: 700 }}>
         {label} ({cards.length})
       </span>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 2 }}>
         {cards.length === 0
-          ? <span style={{ color: '#888', fontSize: 11 }}>—</span>
+          ? <span style={{ color: palette.midGray, fontSize: 11 }}>—</span>
           : cards.map((c, i) => (
             <span key={i} style={{
               color: SUIT_COLOR[c.suit],
-              backgroundColor: '#fff',
-              border: '1px solid #888',
+              backgroundColor: palette.white,
+              border: `1px solid ${palette.midGray}`,
               padding: '0 4px',
               fontSize: 11,
               fontFamily: 'monospace',
@@ -443,7 +445,7 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
               <TitleBar.Close onClick={onClose} />
             </TitleBar.OptionsBox>
           </TitleBar>
-          <div style={{ padding: 12, color: '#000' }}>
+          <div style={{ padding: 12, color: palette.black }}>
             <p style={{ margin: '0 0 12px', fontSize: 11 }}>
               phase: <b>{state.phase}</b> · turn: <b>{state.turnPhase}</b> · decks: <b>{state.deckCount}</b> · middle pile: <b>{state.middlePile.length}</b> cards
             </p>
@@ -457,10 +459,10 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
                   <Frame key={id} bgColor="$material" boxShadow={isCurrent ? '$in' : '$out'} p="$4">
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
                       <span style={{ fontWeight: 700, fontSize: 12 }}>{p.name}</span>
-                      {isMe && <span style={{ fontSize: 10, backgroundColor: '#0a0', color: '#fff', padding: '0 4px' }}>you</span>}
-                      {isCurrent && <span style={{ fontSize: 10, backgroundColor: '#000080', color: '#fff', padding: '0 4px' }}>{state.turnPhase}</span>}
-                      {p.folded && <span style={{ fontSize: 10, backgroundColor: '#a00', color: '#fff', padding: '0 4px' }}>folded</span>}
-                      {!p.connected && <span style={{ fontSize: 10, backgroundColor: '#888', color: '#fff', padding: '0 4px' }}>disconnected</span>}
+                      {isMe && <span style={{ fontSize: 10, backgroundColor: palette.win, color: palette.white, padding: '0 4px' }}>you</span>}
+                      {isCurrent && <span style={{ fontSize: 10, backgroundColor: palette.navy, color: palette.white, padding: '0 4px' }}>{state.turnPhase}</span>}
+                      {p.folded && <span style={{ fontSize: 10, backgroundColor: palette.lose, color: palette.white, padding: '0 4px' }}>folded</span>}
+                      {!p.connected && <span style={{ fontSize: 10, backgroundColor: palette.midGray, color: palette.white, padding: '0 4px' }}>disconnected</span>}
                     </div>
                     <CardList cards={p.hand} label="Hand" />
                     <CardList cards={p.deck} label="Deck" />
@@ -480,7 +482,7 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
                           <span style={{ fontSize: 11, minWidth: 80 }}>{name}</span>
                           <div style={{ display: 'flex', gap: 3 }}>
                             {play.hand.cards.map((c, j) => (
-                              <span key={j} style={{ color: SUIT_COLOR[c.suit], backgroundColor: '#fff', border: '1px solid #888', padding: '0 4px', fontSize: 11, fontFamily: 'monospace' }}>{fmt(c)}</span>
+                              <span key={j} style={{ color: SUIT_COLOR[c.suit], backgroundColor: palette.white, border: `1px solid ${palette.midGray}`, padding: '0 4px', fontSize: 11, fontFamily: 'monospace' }}>{fmt(c)}</span>
                             ))}
                           </div>
                         </div>
@@ -497,7 +499,7 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
               </div>
             )}
 
-            <div style={{ marginTop: 8, color: '#666', fontSize: 10, textAlign: 'center' }}>click outside or press ` to close</div>
+            <div style={{ marginTop: 8, color: palette.dkGray, fontSize: 10, textAlign: 'center' }}>click outside or press ` to close</div>
           </div>
         </Frame>
       </div>

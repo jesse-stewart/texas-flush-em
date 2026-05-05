@@ -1,4 +1,5 @@
 import { Frame } from '@react95/core'
+import { Hourglass } from 'react95'
 import type { PlayerView } from '@shared/engine/state-machine'
 import type { PlayerPresence } from '../../transport/presence'
 import type { Card as CardType } from '@shared/engine/card'
@@ -6,11 +7,12 @@ import type { BotDifficulty, GameEvent } from '@shared/engine/game-state'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
 import { EventBubble } from './EventBubble'
+import { palette } from '../../palette'
 
 const DIFFICULTY_BADGE: Record<BotDifficulty, { label: string; bg: string; fg: string }> = {
-  easy:   { label: 'Easy',   bg: '#000080', fg: '#fff' },
-  medium: { label: 'Medium', bg: '#680068', fg: '#fff' },
-  hard:   { label: 'Hard',   bg: '#a00000', fg: '#fff' },
+  easy:   { label: 'Easy',   bg: palette.navy,      fg: palette.white },
+  medium: { label: 'Medium', bg: palette.botMedium, fg: palette.white },
+  hard:   { label: 'Hard',   bg: palette.lose,      fg: palette.white },
 }
 
 interface OpponentAreaProps {
@@ -94,18 +96,19 @@ function OpponentSeat({
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          color: isActive ? '#fff' : '#000',
+          color: isActive ? palette.white : palette.black,
           fontSize: 12,
         }}
       >
         <span style={{
           width: 8, height: 8,
-          backgroundColor: player.isConnected ? '#0f0' : '#888',
+          backgroundColor: player.isConnected ? palette.lime : palette.midGray,
           flexShrink: 0,
         }} />
         <span style={{ fontWeight: 700 }}>
           {player.name}
         </span>
+        {isActive && <Hourglass size={20} />}
         {hasLeft && <span style={{ opacity: 0.7 }}>· left</span>}
         {!hasLeft && player.eliminated && <span style={{ opacity: 0.7 }}>· out</span>}
         {!player.eliminated && player.folded && <span style={{ opacity: 0.7 }}>· folded</span>}
@@ -156,7 +159,7 @@ function OpponentSeat({
               ))
             )}
           </div>
-          <span style={{ fontSize: 11, color: '#cfd6cf', fontWeight: 500 }}>{deckCount} in deck</span>
+          <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{deckCount} in deck</span>
         </div>
       </div>
     </div>
@@ -165,7 +168,7 @@ function OpponentSeat({
 
 const rowStyle: React.CSSProperties = {
   display: 'flex',
-  justifyContent: 'center',
+  justifyContent: 'safe center',
   gap: 48,
   padding: '14px 24px 8px',
   flexShrink: 0,
@@ -187,9 +190,9 @@ const dealerBadgeStyle: React.CSSProperties = {
   borderRadius: '50%',
   fontSize: 10,
   fontWeight: 700,
-  color: '#000',
-  backgroundColor: '#fde68a',
-  border: '1px solid #000',
+  color: palette.black,
+  backgroundColor: palette.dealerYellow,
+  border: `1px solid ${palette.black}`,
   flexShrink: 0,
 }
 
@@ -215,7 +218,7 @@ const pileDividerStyle: React.CSSProperties = {
 
 const emptyLabelStyle: React.CSSProperties = {
   fontSize: 11,
-  color: '#cfd6cf',
+  color: palette.ltGray,
   fontStyle: 'italic',
 }
 

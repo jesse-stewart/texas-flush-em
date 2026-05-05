@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { GameEvent } from '@shared/engine/game-state'
 import type { PlayerView } from '@shared/engine/state-machine'
 import { formatEvent, latestEventForPlayer, type FormattedEvent } from './eventFormat'
+import { contract } from '@react95/core'
+import { palette } from '../../palette'
 
 const BUBBLE_TTL_MS = 3500
 
@@ -78,11 +80,17 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
 
 // Win95 chiseled-frame look: gray surface with raised border, except colored variants for tone.
 function toneStyle(tone: FormattedEvent['tone']): React.CSSProperties {
+  // Borders mimic Win95 raised-bevel: light top/left, dark bottom/right.
+  // Top/left use white, bottom/right use vdkGray. Neutral surface matches
+  // react95's `material` token so it sits flush with the surrounding frames.
+  const lightBorder = `1px solid ${palette.white}`
+  const darkBorder = `1px solid ${palette.vdkGray}`
+  const bevel = { borderTop: lightBorder, borderLeft: lightBorder, borderRight: darkBorder, borderBottom: darkBorder }
   switch (tone) {
-    case 'positive': return { backgroundColor: '#c0e0c0', color: '#003300', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
-    case 'negative': return { backgroundColor: '#e0c0c0', color: '#330000', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
+    case 'positive': return { backgroundColor: palette.bubblePosBg, color: palette.bubblePosText, ...bevel }
+    case 'negative': return { backgroundColor: palette.bubbleNegBg, color: palette.bubbleNegText, ...bevel }
     case 'neutral':
-    default: return { backgroundColor: '#c3c7cb', color: '#000', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
+    default: return { backgroundColor: contract.colors.material, color: palette.black, ...bevel }
   }
 }
 

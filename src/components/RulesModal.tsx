@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { Frame, TitleBar, Button } from '@react95/core'
+import { Frame, TitleBar } from '@react95/core'
+import { Button } from 'react95'
 
 interface RulesModalProps {
   onClose: () => void
