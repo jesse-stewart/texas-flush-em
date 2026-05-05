@@ -11,7 +11,7 @@ import type { GameAction } from '../transport/types'
 import type { PlayerPresence } from '../transport/presence'
 import type { Card } from '@shared/engine/card'
 import { rankValue, suitValue } from '@shared/engine/card'
-import { OpponentArea } from './Game/OpponentArea'
+import { OpponentArea, OpponentSeat } from './Game/OpponentArea'
 import { TableCenter } from './Game/TableCenter'
 import { ActionBar } from './Game/ActionBar'
 import { PlayerHand } from './Game/PlayerHand'
@@ -92,6 +92,12 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   }, [selected, cardOrder]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const opponents = state.players.filter(p => p.id !== myPlayerId)
+
+  // Opponents in turn order starting clockwise from me, so seat assignment is stable:
+  // [next-to-play, +1, +2] → [left, top, right] in the 4-player grid.
+  const myIndex = state.players.findIndex(p => p.id === myPlayerId)
+  const orderedOpponents = myIndex < 0 ? opponents : Array.from({ length: state.players.length - 1 }, (_, i) => state.players[(myIndex + 1 + i) % state.players.length])
+  const useGridLayout = orderedOpponents.length === 3
 
   const cards = cardOrder.map(s => s.card)
   const ids = cardOrder.map(s => `slot-${s.id}`)
@@ -255,40 +261,113 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
         }}
       >
         <LayoutGroup>
-          <OpponentArea
-            opponents={opponents}
-            allPlayers={state.players}
-            myPlayerId={myPlayerId}
-            currentPlayerId={state.currentPlayerId}
-            dealerId={state.dealerId}
-            presence={presence}
-            events={state.events}
-          />
+          {useGridLayout ? (
+            <div style={tableGridStyle}>
+              <div style={{ gridArea: 'top', display: 'flex', justifyContent: 'center' }}>
+                <OpponentSeat
+                  player={orderedOpponents[1]}
+                  isActive={orderedOpponents[1].id === state.currentPlayerId}
+                  isDealer={orderedOpponents[1].id === state.dealerId}
+                  presence={presence.get(orderedOpponents[1].id) ?? null}
+                  events={state.events}
+                  myPlayerId={myPlayerId}
+                  allPlayers={state.players}
+                />
+              </div>
 
-          <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
+              <div style={{ gridArea: 'left', display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
+                <OpponentSeat
+                  player={orderedOpponents[0]}
+                  isActive={orderedOpponents[0].id === state.currentPlayerId}
+                  isDealer={orderedOpponents[0].id === state.dealerId}
+                  presence={presence.get(orderedOpponents[0].id) ?? null}
+                  events={state.events}
+                  myPlayerId={myPlayerId}
+                  allPlayers={state.players}
+                  orientation="vertical"
+                />
+              </div>
 
-          <ActionBar
-            state={state}
-            myPlayerId={myPlayerId}
-            selected={selectedCards}
-            onDiscard={handleDiscard}
-            onPlay={handlePlay}
-            onFold={handleFold}
-          />
+              <div style={{ gridArea: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
+              </div>
 
-          <PlayerHand
-            cards={cards}
-            ids={ids}
-            selectedIndices={selectedIndices}
-            onToggle={toggleCard}
-            onReorder={handleReorder}
-            onSortByRank={sortByRank}
-            onSortBySuit={sortBySuit}
-            disabled={state.currentPlayerId !== myPlayerId}
-            deckSize={state.myDeckSize}
-            discardingCards={discardingCards}
-            isDealer={state.dealerId === myPlayerId}
-          />
+              <div style={{ gridArea: 'right', display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start' }}>
+                <OpponentSeat
+                  player={orderedOpponents[2]}
+                  isActive={orderedOpponents[2].id === state.currentPlayerId}
+                  isDealer={orderedOpponents[2].id === state.dealerId}
+                  presence={presence.get(orderedOpponents[2].id) ?? null}
+                  events={state.events}
+                  myPlayerId={myPlayerId}
+                  allPlayers={state.players}
+                  orientation="vertical"
+                />
+              </div>
+
+              <div style={{ gridArea: 'bottom', paddingTop: 24 }}>
+                <ActionBar
+                  state={state}
+                  myPlayerId={myPlayerId}
+                  selected={selectedCards}
+                  onDiscard={handleDiscard}
+                  onPlay={handlePlay}
+                  onFold={handleFold}
+                />
+
+                <PlayerHand
+                  cards={cards}
+                  ids={ids}
+                  selectedIndices={selectedIndices}
+                  onToggle={toggleCard}
+                  onReorder={handleReorder}
+                  onSortByRank={sortByRank}
+                  onSortBySuit={sortBySuit}
+                  disabled={state.currentPlayerId !== myPlayerId}
+                  deckSize={state.myDeckSize}
+                  discardingCards={discardingCards}
+                  isDealer={state.dealerId === myPlayerId}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <OpponentArea
+                opponents={opponents}
+                allPlayers={state.players}
+                myPlayerId={myPlayerId}
+                currentPlayerId={state.currentPlayerId}
+                dealerId={state.dealerId}
+                presence={presence}
+                events={state.events}
+              />
+
+              <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
+
+              <ActionBar
+                state={state}
+                myPlayerId={myPlayerId}
+                selected={selectedCards}
+                onDiscard={handleDiscard}
+                onPlay={handlePlay}
+                onFold={handleFold}
+              />
+
+              <PlayerHand
+                cards={cards}
+                ids={ids}
+                selectedIndices={selectedIndices}
+                onToggle={toggleCard}
+                onReorder={handleReorder}
+                onSortByRank={sortByRank}
+                onSortBySuit={sortBySuit}
+                disabled={state.currentPlayerId !== myPlayerId}
+                deckSize={state.myDeckSize}
+                discardingCards={discardingCards}
+                isDealer={state.dealerId === myPlayerId}
+              />
+            </>
+          )}
         </LayoutGroup>
 
         <div style={selfBubbleOverlayStyle}>
@@ -310,6 +389,21 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
     </Frame>
   )
+}
+
+const tableGridStyle: React.CSSProperties = {
+  flex: 1,
+  display: 'grid',
+  gridTemplateColumns: 'minmax(160px, 1fr) minmax(0, auto) minmax(160px, 1fr)',
+  gridTemplateRows: 'auto 1fr auto',
+  gridTemplateAreas: `
+    "left   top    right"
+    "left   center right"
+    "bottom bottom bottom"
+  `,
+  gap: 12,
+  padding: 12,
+  minHeight: 0,
 }
 
 const selfBubbleOverlayStyle: React.CSSProperties = {

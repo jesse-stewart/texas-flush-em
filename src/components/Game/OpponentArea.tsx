@@ -52,8 +52,9 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
   suit: SUITS[Math.floor(i / 13)],
 }))
 
-function OpponentSeat({
+export function OpponentSeat({
   player, isActive, isDealer, presence, events, myPlayerId, allPlayers,
+  orientation = 'horizontal',
 }: {
   player: PlayerView
   isActive: boolean
@@ -62,6 +63,7 @@ function OpponentSeat({
   events: GameEvent[]
   myPlayerId: string
   allPlayers: PlayerView[]
+  orientation?: 'horizontal' | 'vertical'
 }) {
   const handCount = player.handSize
   const deckCount = player.deckSize
@@ -126,10 +128,12 @@ function OpponentSeat({
         )}
       </Frame>
 
-      <div style={pilesStyle}>
+      <div style={orientation === 'vertical' ? pilesVerticalStyle : pilesStyle}>
         <div style={pileGroupStyle}>
           {handCount === 0 ? (
             <span style={emptyLabelStyle}>empty</span>
+          ) : orientation === 'vertical' ? (
+            <VerticalCardStack count={handCount} />
           ) : (
             <Hand
               cards={fakeCards}
@@ -143,7 +147,7 @@ function OpponentSeat({
           )}
         </div>
 
-        <div style={pileDividerStyle} />
+        <div style={orientation === 'vertical' ? pileDividerVerticalStyle : pileDividerStyle} />
 
         <div style={pileGroupStyle}>
           <div style={{ position: 'relative', width: 80 + deckLayers * 3, height: 112 + deckLayers * 3 }}>
@@ -162,6 +166,40 @@ function OpponentSeat({
           <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{deckCount} in deck</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+// Vertical face-down hand for side-seated opponents — each card is rotated 90deg
+// and overlaps the next, stacking down the column. Rotation pivots at top-left
+// then translates +width on X to bring the visual back into positive coords.
+function VerticalCardStack({ count }: { count: number }) {
+  const STEP = 22
+  const CARD_W = 80
+  const CARD_H = 112
+  return (
+    <div style={{
+      position: 'relative',
+      width: CARD_H,
+      height: (count - 1) * STEP + CARD_W,
+    }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            top: i * STEP,
+            left: 0,
+            width: CARD_W,
+            height: CARD_H,
+            transformOrigin: 'top left',
+            transform: `translateX(${CARD_H}px) rotate(90deg)`,
+            zIndex: i,
+          }}
+        >
+          <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
+        </div>
+      ))}
     </div>
   )
 }
@@ -212,6 +250,20 @@ const pileGroupStyle: React.CSSProperties = {
 const pileDividerStyle: React.CSSProperties = {
   width: 1,
   height: 40,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  alignSelf: 'center',
+}
+
+const pilesVerticalStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const pileDividerVerticalStyle: React.CSSProperties = {
+  width: 40,
+  height: 1,
   backgroundColor: 'rgba(255,255,255,0.2)',
   alignSelf: 'center',
 }
