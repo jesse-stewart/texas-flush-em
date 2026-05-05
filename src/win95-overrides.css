@@ -1,0 +1,28 @@
+/* Win95 desktop background. The classic teal — applied to body so every screen
+   sits on it (lobby, game, error, modals). */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background-color: #008080;
+  min-height: 100vh;
+  font-family: 'ms_sans_serif', 'Microsoft Sans Serif', sans-serif;
+  color: #000;
+}
+
+/* "Pressed" / selected state for buttons used as toggle / segmented controls.
+   React95's Button has its own :focus and :active rules that shift padding and
+   box-shadow. To make a button look statically pressed without breaking focus,
+   we have to mirror the :active geometry across all states. */
+button.r95-pressed,
+button.r95-pressed:focus,
+button.r95-pressed:active {
+  padding-top: var(--r95-space-8);
+  padding-bottom: var(--r95-space-4);
+  box-shadow:
+    inset 0 0 0 1px var(--r95-color-borderDark),
+    0 0 0 1px var(--r95-color-borderDarkest);
+}
+button.r95-pressed:focus {
+  outline: var(--r95-space-1) dotted var(--r95-color-borderDarkest);
+  outline-offset: calc(var(--r95-space-5) * -1);
+}

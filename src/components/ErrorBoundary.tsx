@@ -1,8 +1,6 @@
 import { Component, type ReactNode } from 'react'
+import { Modal, TitleBar, Frame } from '@react95/core'
 
-// Keys the app writes to localStorage. Listed here so the error recovery flow
-// can wipe them — broken saved state from a prior deploy is the most common
-// cause of a blank-page-on-load.
 const APP_LOCALSTORAGE_KEYS = ['flushem_session', 'flushem_settings', 'flushem_name']
 
 interface State {
@@ -22,7 +20,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
   handleReset = () => {
     for (const key of APP_LOCALSTORAGE_KEYS) {
-      try { localStorage.removeItem(key) } catch { /* private mode — ignore */ }
+      try { localStorage.removeItem(key) } catch { /* private mode */ }
     }
     window.location.href = window.location.origin + window.location.pathname
   }
@@ -31,81 +29,56 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     if (!this.state.error) return this.props.children
 
     return (
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>Something broke</h1>
-          <p style={styles.subtitle}>
-            The app hit an unexpected error. This usually happens after an update if your saved
-            game data is no longer compatible.
-          </p>
-          <pre style={styles.errorText}>{this.state.error.message}</pre>
-          <button style={styles.btn} onClick={this.handleReset}>
-            Reset and reload
-          </button>
-          <p style={styles.note}>
-            (Clears your saved session, name, and game settings.)
-          </p>
-        </div>
+      <div style={pageStyle}>
+        <Modal
+          width="460px"
+          title="Error - Texas Flush'em"
+          icon={<span style={{ fontSize: 14, marginRight: 4 }}>!</span>}
+          titleBarOptions={[<TitleBar.Close key="close" onClick={this.handleReset} />]}
+          buttons={[{ value: 'Reset and reload', onClick: this.handleReset }]}
+          buttonsAlignment="flex-end"
+          dragOptions={{ defaultPosition: { x: 0, y: 0 } }}
+        >
+          <Modal.Content boxShadow="none" bgColor="$material" p="$8">
+            <h2 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>
+              Something broke
+            </h2>
+            <p style={{ fontSize: 12, margin: '0 0 12px', lineHeight: 1.5 }}>
+              The app hit an unexpected error. This usually happens after an update if your
+              saved game data is no longer compatible.
+            </p>
+            <Frame
+              bgColor="$inputBackground"
+              boxShadow="$in"
+              p="$6"
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 11,
+                color: '#a00',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                marginBottom: 12,
+                maxHeight: 200,
+                overflow: 'auto',
+              }}
+            >
+              {this.state.error.message}
+              {this.state.error.stack && '\n\n' + this.state.error.stack}
+            </Frame>
+            <p style={{ fontSize: 11, color: '#444', margin: 0 }}>
+              (Clears your saved session, name, and game settings.)
+            </p>
+          </Modal.Content>
+        </Modal>
       </div>
     )
   }
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f4c2a',
-    fontFamily: 'system-ui, sans-serif',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: '32px 40px',
-    maxWidth: 460,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-  },
-  title: {
-    margin: '0 0 8px',
-    fontSize: 22,
-    fontWeight: 800,
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    margin: '0 0 16px',
-    fontSize: 14,
-    color: '#4b5563',
-    lineHeight: 1.5,
-  },
-  errorText: {
-    backgroundColor: '#f3f4f6',
-    border: '1px solid #e5e7eb',
-    borderRadius: 6,
-    padding: '8px 12px',
-    fontSize: 12,
-    color: '#991b1b',
-    fontFamily: 'monospace',
-    overflow: 'auto',
-    margin: '0 0 16px',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-  },
-  btn: {
-    padding: '10px 20px',
-    fontSize: 15,
-    fontWeight: 600,
-    borderRadius: 6,
-    border: 'none',
-    cursor: 'pointer',
-    backgroundColor: '#16a34a',
-    color: '#fff',
-  },
-  note: {
-    margin: '12px 0 0',
-    fontSize: 12,
-    color: '#9ca3af',
-  },
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 20,
 }

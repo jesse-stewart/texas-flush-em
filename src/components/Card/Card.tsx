@@ -1,4 +1,4 @@
-import type { Card as CardType } from '@shared/engine/card'
+import type { Card as CardType, Rank, Suit } from '@shared/engine/card'
 
 interface CardProps {
   card: CardType
@@ -7,30 +7,47 @@ interface CardProps {
   onClick?: () => void
 }
 
-const SUIT_LETTER: Record<string, string> = {
-  clubs: 'c',
-  diamonds: 'd',
-  hearts: 'h',
-  spades: 's',
+const CARD_W = 80
+const CARD_H = 112
+const COLS = 13
+const ROWS = 6
+
+const SUIT_ROW: Record<Suit, number> = {
+  spades: 0,
+  hearts: 1,
+  clubs: 2,
+  diamonds: 3,
 }
 
-function cardImageUrl(card: CardType): string {
-  const suitLetter = SUIT_LETTER[card.suit]
-  const rank = card.rank
-  let rankStr: string
-  if (rank === 'A') rankStr = '1'
-  else if (rank === 'J') rankStr = 'j'
-  else if (rank === 'Q') rankStr = 'q'
-  else if (rank === 'K') rankStr = 'k'
-  else rankStr = String(rank)
-  return `/${card.suit}/${rankStr}${suitLetter}.svg`
+const RANK_COL: Record<string, number> = {
+  A: 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6,
+  '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
+}
+
+// Static back for now: palm tree at row 6, col 4 (zero-indexed: row 5, col 3)
+const BACK_ROW = 5
+const BACK_COL = 3
+
+const SPRITE_URL = '/cards.png'
+
+function spritePosition(row: number, col: number): React.CSSProperties {
+  return {
+    backgroundImage: `url(${SPRITE_URL})`,
+    backgroundSize: `${COLS * CARD_W}px ${ROWS * CARD_H}px`,
+    backgroundPosition: `-${col * CARD_W}px -${row * CARD_H}px`,
+    backgroundRepeat: 'no-repeat',
+    imageRendering: 'pixelated',
+  }
+}
+
+function faceSpritePosition(rank: Rank, suit: Suit): React.CSSProperties {
+  return spritePosition(SUIT_ROW[suit], RANK_COL[String(rank)])
 }
 
 export function Card({ card, selected = false, faceDown = false, onClick }: CardProps) {
   const base: React.CSSProperties = {
-    width: 80,
-    height: 112,
-    borderRadius: 8,
+    width: CARD_W,
+    height: CARD_H,
     cursor: onClick ? 'pointer' : 'default',
     userSelect: 'none',
     transition: 'transform 0.1s ease, box-shadow 0.1s ease',
@@ -42,27 +59,16 @@ export function Card({ card, selected = false, faceDown = false, onClick }: Card
       : '0 2px 6px rgba(0,0,0,0.18)',
   }
 
-  if (faceDown) {
-    return (
-      <div
-        onClick={onClick}
-        style={{
-          ...base,
-          backgroundColor: '#1e40af',
-          backgroundImage: 'repeating-linear-gradient(45deg, #1d3a9e 0px, #1d3a9e 2px, #1e40af 2px, #1e40af 8px)',
-        }}
-      />
-    )
-  }
+  const sprite = faceDown
+    ? spritePosition(BACK_ROW, BACK_COL)
+    : faceSpritePosition(card.rank, card.suit)
 
   return (
-    <div onClick={onClick} style={base}>
-      <img
-        src={cardImageUrl(card)}
-        alt={`${card.rank} of ${card.suit}`}
-        style={{ width: '100%', height: '100%', display: 'block' }}
-        draggable={false}
-      />
-    </div>
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      aria-label={faceDown ? 'face-down card' : `${card.rank} of ${card.suit}`}
+      style={{ ...base, ...sprite }}
+    />
   )
 }

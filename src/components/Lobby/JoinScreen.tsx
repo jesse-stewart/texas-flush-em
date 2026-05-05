@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Frame, TitleBar, Button, Input } from '@react95/core'
 import { RulesModal } from '../RulesModal'
 
 interface JoinScreenProps {
@@ -40,153 +41,98 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Texas Flush'em</h1>
-        <p style={styles.subtitle}>Deck poker for 2–4 players</p>
+    <div style={pageStyle}>
+      <Frame
+        bgColor="$material"
+        boxShadow="$out"
+        p="$2"
+        style={{ width: 360 }}
+      >
+        <TitleBar title="Texas Flush'em - Join Game" active />
+        <div style={{ padding: 16 }}>
+          <p style={{ margin: '0 0 16px', fontSize: 12 }}>Deck poker for 2-4 players</p>
 
-        <label style={styles.label}>Your name</label>
-        <input
-          style={styles.input}
-          value={name}
-          onChange={e => { setName(e.target.value); setError('') }}
-          placeholder="e.g. Alice"
-          maxLength={20}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          autoFocus
-        />
+          <Field label="Your name">
+            <Input
+              value={name}
+              onChange={e => { setName(e.target.value); setError('') }}
+              placeholder="e.g. Alice"
+              maxLength={20}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              autoFocus
+              style={{ width: '100%' }}
+            />
+          </Field>
 
-        <label style={styles.label}>Room code</label>
-        <input
-          style={styles.input}
-          value={roomInput}
-          onChange={e => { setRoomInput(e.target.value); setError('') }}
-          placeholder="e.g. A3BC9F"
-          maxLength={6}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
+          <Field label="Room code">
+            <Input
+              value={roomInput}
+              onChange={e => { setRoomInput(e.target.value); setError('') }}
+              placeholder="e.g. A3BC9F"
+              maxLength={6}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              style={{ width: '100%' }}
+            />
+          </Field>
 
-        <label style={styles.label}>
-          Password <span style={styles.optional}>(optional)</span>
-        </label>
-        <input
-          style={styles.input}
-          type="password"
-          value={password}
-          onChange={e => { setPassword(e.target.value); setError('') }}
-          placeholder={hasRoom ? 'If the room has one' : 'Lock this room'}
-          maxLength={32}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
+          <Field label={<>Password <span style={{ color: '#666', fontWeight: 400 }}>(optional)</span></>}>
+            <Input
+              type="password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              placeholder={hasRoom ? 'If the room has one' : 'Lock this room'}
+              maxLength={32}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              style={{ width: '100%' }}
+            />
+          </Field>
 
-        {displayError && <p style={styles.error}>{displayError}</p>}
+          {displayError && (
+            <Frame
+              bgColor="$inputBackground"
+              boxShadow="$in"
+              p="$4"
+              style={{ marginBottom: 12, color: '#a00', fontSize: 12 }}
+            >
+              {displayError}
+            </Frame>
+          )}
 
-        <button style={styles.btn} onClick={handleSubmit}>
-          {hasRoom ? 'Join game' : 'Create game'}
-        </button>
-
-        {hasRoom && (
-          <button style={styles.spectateBtn} onClick={handleSpectate}>
-            Watch as spectator
-          </button>
-        )}
-
-        <button style={styles.rulesLink} onClick={() => setRulesOpen(true)}>
-          How to play
-        </button>
-      </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            <Button onClick={handleSubmit} style={{ width: '100%' }}>
+              {hasRoom ? 'Join game' : 'Create game'}
+            </Button>
+            {hasRoom && (
+              <Button onClick={handleSpectate} style={{ width: '100%' }}>
+                Watch as spectator
+              </Button>
+            )}
+            <Button onClick={() => setRulesOpen(true)} style={{ width: '100%' }}>
+              How to play
+            </Button>
+          </div>
+        </div>
+      </Frame>
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f4c2a',
-    fontFamily: 'system-ui, sans-serif',
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: '40px 48px',
-    width: 360,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  title: {
-    margin: '0 0 4px',
-    fontSize: 32,
-    fontWeight: 800,
-    color: '#1a1a1a',
-    letterSpacing: '-1px',
-  },
-  subtitle: {
-    margin: '0 0 28px',
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: 6,
-  },
-  optional: {
-    fontSize: 12,
-    fontWeight: 400,
-    color: '#9ca3af',
-  },
-  input: {
-    padding: '10px 12px',
-    fontSize: 15,
-    borderRadius: 6,
-    border: '1.5px solid #d1d5db',
-    outline: 'none',
-    marginBottom: 12,
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  btn: {
-    padding: '11px 20px',
-    fontSize: 15,
-    fontWeight: 600,
-    borderRadius: 6,
-    border: 'none',
-    cursor: 'pointer',
-    marginTop: 4,
-    backgroundColor: '#16a34a',
-    color: '#fff',
-  },
-  error: {
-    color: '#dc2626',
-    fontSize: 13,
-    margin: '0 0 12px',
-  },
-  spectateBtn: {
-    padding: '9px 20px',
-    fontSize: 14,
-    fontWeight: 600,
-    borderRadius: 6,
-    border: '1.5px solid #d1d5db',
-    cursor: 'pointer',
-    marginTop: 8,
-    backgroundColor: '#fff',
-    color: '#374151',
-  },
-  rulesLink: {
-    marginTop: 16,
-    fontSize: 13,
-    color: '#6b7280',
-    textAlign: 'center',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 0,
-    textDecoration: 'underline',
-  },
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 20,
 }

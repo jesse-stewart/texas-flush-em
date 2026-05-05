@@ -4,7 +4,6 @@ import type { GameEvent } from '@shared/engine/game-state'
 import type { PlayerView } from '@shared/engine/state-machine'
 import { formatEvent, latestEventForPlayer, type FormattedEvent } from './eventFormat'
 
-// How long any bubble (action or turn-start) sticks around before fading away.
 const BUBBLE_TTL_MS = 3500
 
 interface EventBubbleProps {
@@ -16,12 +15,9 @@ interface EventBubbleProps {
 }
 
 export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTurn }: EventBubbleProps) {
-  // Force a single re-render when the active bubble hits its TTL so it can fade out.
   const [, tick] = useState(0)
   const lastEvent = latestEventForPlayer(events, playerId)
 
-  // Capture the moment this player's turn began, so "their turn" / "Your turn"
-  // shows briefly and then disappears (rather than persisting all turn long).
   const wasCurrentTurn = useRef(isCurrentTurn)
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(isCurrentTurn ? Date.now() : null)
   useEffect(() => {
@@ -29,7 +25,6 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
     wasCurrentTurn.current = isCurrentTurn
   }, [isCurrentTurn])
 
-  // Schedule a single rerender at the next TTL boundary so the bubble fades on time.
   const eventTs = lastEvent?.ts ?? 0
   const nextDeadline = Math.max(
     eventTs ? eventTs + BUBBLE_TTL_MS : 0,
@@ -46,7 +41,6 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
   const isMe = playerId === myPlayerId
   const now = Date.now()
 
-  // Decide what (if anything) to show: whichever signal is freshest within TTL.
   let content: FormattedEvent | null = null
   let contentTs = 0
   const eventFresh = lastEvent && now - lastEvent.ts < BUBBLE_TTL_MS
@@ -60,11 +54,10 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
     content = { text: isMe ? 'Your turn' : `${name}'s turn`, tone: 'neutral' }
   }
 
-  // Stable key per "bubble episode" so AnimatePresence transitions when text changes.
   const key = content ? content.text : 'empty'
 
   return (
-    <div style={styles.wrap} aria-live="polite">
+    <div style={wrapStyle} aria-live="polite">
       <AnimatePresence>
         {content && (
           <motion.div
@@ -73,7 +66,7 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.96 }}
             transition={{ duration: 0.18 }}
-            style={{ ...styles.bubble, ...toneStyle(content.tone) }}
+            style={{ ...bubbleStyle, ...toneStyle(content.tone) }}
           >
             {content.text}
           </motion.div>
@@ -83,29 +76,26 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
   )
 }
 
+// Win95 chiseled-frame look: gray surface with raised border, except colored variants for tone.
 function toneStyle(tone: FormattedEvent['tone']): React.CSSProperties {
   switch (tone) {
-    case 'positive': return { backgroundColor: 'rgba(22, 101, 52, 0.92)', color: '#bbf7d0', borderColor: 'rgba(74, 222, 128, 0.4)' }
-    case 'negative': return { backgroundColor: 'rgba(127, 29, 29, 0.92)', color: '#fecaca', borderColor: 'rgba(248, 113, 113, 0.4)' }
+    case 'positive': return { backgroundColor: '#c0e0c0', color: '#003300', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
+    case 'negative': return { backgroundColor: '#e0c0c0', color: '#330000', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
     case 'neutral':
-    default: return { backgroundColor: 'rgba(15, 23, 42, 0.92)', color: '#e5e7eb', borderColor: 'rgba(255, 255, 255, 0.12)' }
+    default: return { backgroundColor: '#c3c7cb', color: '#000', borderTop: '1px solid #fff', borderLeft: '1px solid #fff', borderRight: '1px solid #404040', borderBottom: '1px solid #404040' }
   }
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  wrap: {
-    display: 'flex',
-    justifyContent: 'center',
-    minHeight: 26,
-    pointerEvents: 'none',
-  },
-  bubble: {
-    fontSize: 12,
-    fontWeight: 600,
-    padding: '4px 12px',
-    borderRadius: 12,
-    border: '1px solid',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-    whiteSpace: 'nowrap',
-  },
+const wrapStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  minHeight: 26,
+  pointerEvents: 'none',
+}
+
+const bubbleStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  padding: '3px 10px',
+  whiteSpace: 'nowrap',
 }

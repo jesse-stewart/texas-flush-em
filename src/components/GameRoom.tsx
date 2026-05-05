@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Frame, TitleBar, Button, Fieldset } from '@react95/core'
 import { useGame } from '../hooks/useGame'
 import { WaitingRoom } from './Lobby/WaitingRoom'
 import { GameScreen } from './GameScreen'
@@ -21,8 +22,6 @@ interface GameRoomProps {
 export function GameRoom({ roomId, playerId, playerName, password, spectatorMode, onLeave, onAuthFailed }: GameRoomProps) {
   const { state, isConnected, connectionError, send, presence, debugState, requestDebugState } = useGame({ roomId, playerId, password })
 
-  // Server rejected the connection (4xxx close code) — bubble up so the App
-  // can drop the session and route back to JoinScreen with the error.
   useEffect(() => {
     if (connectionError) onAuthFailed(connectionError.reason || 'rejected')
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -31,7 +30,6 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
   const [roundModalDismissed, setRoundModalDismissed] = useState(false)
   const [spectating, setSpectating] = useState(false)
 
-  // Reset modal and spectating each time a new round ends
   useEffect(() => {
     if (state?.phase === 'round_end') {
       setRoundModalDismissed(false)
@@ -52,9 +50,6 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Send JOIN every time we connect (handles initial connect + reconnects).
-  // Server-side ADD_PLAYER is idempotent in lobby and a no-op once playing.
-  // Spectators do not send JOIN — they receive state without being added as players.
   useEffect(() => {
     if (isConnected && !spectatorMode) {
       send({ type: 'JOIN', playerName })
@@ -69,7 +64,9 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
   }
 
   let content: React.ReactNode = (
-    <div style={loadingStyle}><span>Connecting…</span></div>
+    <CenterPanel title="Connecting...">
+      <p style={{ margin: 0, fontSize: 12 }}>Connecting to room {roomId}...</p>
+    </CenterPanel>
   )
 
   if (state) {
@@ -145,27 +142,38 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
   )
 }
 
+function CenterPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={pageStyle}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ minWidth: 320 }}>
+        <TitleBar title={title} active />
+        <div style={{ padding: 16 }}>
+          {children}
+        </div>
+      </Frame>
+    </div>
+  )
+}
+
 function SpectatorLobbyScreen({ state, roomId, onLeave }: { state: ClientGameState; roomId: string; onLeave: () => void }) {
   return (
-    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 16 }}>
-      <h2 style={{ color: '#fff', margin: 0, fontSize: 22, fontWeight: 800 }}>Spectating — {roomId}</h2>
-      <p style={{ color: '#9ca3af', margin: 0, fontSize: 15 }}>
-        Waiting for the game to start… ({state.players.length}/4 players joined)
+    <CenterPanel title={`Spectating - ${roomId}`}>
+      <p style={{ margin: '0 0 12px', fontSize: 12 }}>
+        Waiting for the game to start... ({state.players.length}/4 players joined)
       </p>
-      <button onClick={onLeave} style={roundBtn('rgba(255,255,255,0.1)')}>Leave</button>
-    </div>
+      <Button onClick={onLeave}>Leave</Button>
+    </CenterPanel>
   )
 }
 
 function AbandonedScreen({ abandonedByName, onLeave }: { abandonedByName: string | null; onLeave: () => void }) {
   return (
-    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 16 }}>
-      <h2 style={{ color: '#fff', margin: 0, fontSize: 24 }}>Game over</h2>
-      <p style={{ color: '#d1d5db', margin: 0 }}>
+    <CenterPanel title="Game over">
+      <p style={{ margin: '0 0 12px', fontSize: 12 }}>
         {abandonedByName ? `${abandonedByName} left the game.` : 'A player left the game.'}
       </p>
-      <button onClick={onLeave} style={roundBtn('#16a34a')}>Back to lobby</button>
-    </div>
+      <Button onClick={onLeave}>Back to lobby</Button>
+    </CenterPanel>
   )
 }
 
@@ -184,34 +192,22 @@ function RoundEndModal({
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: 'rgba(0,0,0,0.4)',
     }}>
-      <div style={{
-        backgroundColor: '#1a2e1a',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 16,
-        padding: '36px 48px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
-        minWidth: 280,
-      }}>
-        <div style={{ fontSize: 28, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
-          {winner?.name ?? 'Someone'} wins the round!
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ minWidth: 320 }}>
+        <TitleBar title="Round Result" active />
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>
+            {winner?.name ?? 'Someone'} wins the round!
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? '#080' : '#a00' }}>
+            {isWinner ? 'No chips lost' : `-${myDelta} chips`}
+          </div>
+          <Button onClick={onNext} style={{ marginTop: 8, minWidth: 120 }}>
+            See scores
+          </Button>
         </div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: isWinner ? '#6ee7b7' : '#fca5a5' }}>
-          {isWinner ? 'No chips lost' : `-${myDelta} chips`}
-        </div>
-        <button onClick={onNext} style={{
-          marginTop: 12,
-          padding: '10px 32px',
-          fontSize: 15, fontWeight: 700,
-          borderRadius: 8, border: 'none',
-          backgroundColor: '#16a34a', color: '#fff',
-          cursor: 'pointer',
-        }}>
-          See scores →
-        </button>
-      </div>
+      </Frame>
     </div>
   )
 }
@@ -221,7 +217,6 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
   const isWinner = state.gameWinnerId === myPlayerId
   const isChips = state.options.scoringMode === 'chips'
 
-  // Chips: highest balance first. Points: lowest score first.
   const sorted = [...state.players].sort((a, b) =>
     isChips
       ? (state.scores[b.id] ?? 0) - (state.scores[a.id] ?? 0)
@@ -229,40 +224,50 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
   )
 
   return (
-    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 20 }}>
-      <h2 style={{ color: '#fde68a', margin: 0, fontSize: 28, fontWeight: 800 }}>
-        {isWinner ? 'You win the game!' : `${winner?.name ?? 'Someone'} wins the game!`}
-      </h2>
+    <div style={pageStyle}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: 480, maxWidth: '100%' }}>
+        <TitleBar title="Game over" active />
+        <div style={{ padding: 12 }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, textAlign: 'center' }}>
+            {isWinner ? 'You win the game!' : `${winner?.name ?? 'Someone'} wins the game!`}
+          </h2>
 
-      <table style={{ color: '#d1d5db', borderCollapse: 'collapse', textAlign: 'right', fontSize: 15 }}>
-        <thead>
-          <tr style={{ color: '#6b7280', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            <th style={{ textAlign: 'left', paddingRight: 24, paddingBottom: 8, fontWeight: 400 }}></th>
-            <th style={{ paddingBottom: 8, fontWeight: 400 }}>{isChips ? 'chips' : 'points'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(p => {
-            const isMe = p.id === myPlayerId
-            const isGameWinner = p.id === state.gameWinnerId
-            return (
-              <tr key={p.id} style={{ opacity: p.eliminated && !isGameWinner ? 0.45 : 1 }}>
-                <td style={{ textAlign: 'left', paddingRight: 24, paddingTop: 10, fontWeight: isMe ? 700 : 400, color: isMe ? '#fde68a' : '#d1d5db' }}>
-                  {p.name}
-                  {isGameWinner && <span style={{ marginLeft: 8, fontSize: 11, color: '#6ee7b7' }}>winner</span>}
-                </td>
-                <td style={{ paddingTop: 10, fontWeight: 700, color: isMe ? '#fde68a' : '#d1d5db' }}>
-                  {state.scores[p.id] ?? 0}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+          <Fieldset legend="Final scores">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', paddingBottom: 6, fontWeight: 700 }}>Player</th>
+                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>{isChips ? 'chips' : 'points'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map(p => {
+                  const isMe = p.id === myPlayerId
+                  const isGameWinner = p.id === state.gameWinnerId
+                  return (
+                    <tr key={p.id} style={{ opacity: p.eliminated && !isGameWinner ? 0.5 : 1 }}>
+                      <td style={{ paddingTop: 4, fontWeight: isMe ? 700 : 400 }}>
+                        {p.name}
+                        {isGameWinner && <span style={{ marginLeft: 6, color: '#080', fontSize: 11 }}>winner</span>}
+                      </td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>
+                        {state.scores[p.id] ?? 0}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Fieldset>
 
-      <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
+          <div style={{ height: 8 }} />
+          <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
 
-      <button onClick={onLeave} style={roundBtn('#16a34a')}>Back to lobby</button>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+            <Button onClick={onLeave} style={{ minWidth: 120 }}>Back to lobby</Button>
+          </div>
+        </div>
+      </Frame>
     </div>
   )
 }
@@ -282,12 +287,10 @@ function RoundEndScreen({
   const isChips = state.options.scoringMode === 'chips'
   const totalLabel = isChips ? 'chips' : 'points'
 
-  // Humans whose readiness gates the next round (bots auto-ready; disconnected/eliminated skipped).
   const requiredReady = state.players.filter(p => !p.isBot && !p.eliminated && p.isConnected)
   const waitingFor = requiredReady.filter(p => !state.nextRoundReady[p.id])
   const meReady = !!state.nextRoundReady[myPlayerId]
 
-  // Chips: best (most chips) first. Points: best (lowest) first. Eliminated last.
   const sorted = [...state.players].sort((a, b) => {
     if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1
     return isChips
@@ -298,93 +301,99 @@ function RoundEndScreen({
   const roundEvents = currentRoundEvents(state.events)
 
   return (
-    <div style={{ ...loadingStyle, flexDirection: 'column', gap: 20, paddingTop: 32, paddingBottom: 32 }}>
-      <h2 style={{ color: '#fff', margin: 0, fontSize: 24, fontWeight: 800 }}>
-        {winner?.name ?? 'Someone'} wins the round!
-      </h2>
+    <div style={pageStyle}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: 520, maxWidth: '100%' }}>
+        <TitleBar title="Round complete" active />
+        <div style={{ padding: 12 }}>
+          <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, textAlign: 'center' }}>
+            {winner?.name ?? 'Someone'} wins the round!
+          </h2>
 
-      <table style={{ color: '#d1d5db', borderCollapse: 'collapse', textAlign: 'right', fontSize: 15 }}>
-        <thead>
-          <tr style={{ color: '#6b7280', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            <th style={{ textAlign: 'left', paddingRight: 24, paddingBottom: 8, fontWeight: 400 }}></th>
-            <th style={{ paddingRight: 20, paddingBottom: 8, fontWeight: 400 }}>before</th>
-            <th style={{ paddingRight: 20, paddingBottom: 8, fontWeight: 400 }}>this round</th>
-            <th style={{ paddingBottom: 8, fontWeight: 400 }}>{totalLabel}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(p => {
-            // Chips: delta is signed (winner positive, losers negative). Points: delta is positive penalty.
-            const delta = state.roundScoreDelta[p.id] ?? 0
-            const total = state.scores[p.id] ?? 0
-            const before = isChips ? total - delta : total - delta
-            const isMe = p.id === myPlayerId
-            const isRoundWinner = p.id === state.roundWinnerId
-            // Sign + color: chips winner gains (green +N); chips loser loses (red -N); points loser adds (red +N).
-            let deltaText = '—'
-            let deltaColor = '#6b7280'
-            if (isChips) {
-              if (delta > 0) { deltaText = `+${delta}`; deltaColor = '#6ee7b7' }
-              else if (delta < 0) { deltaText = `${delta}`; deltaColor = '#fca5a5' }
-            } else {
-              if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = '#fca5a5' }
-            }
-            // Readiness indicator: only meaningful for humans we're waiting on.
-            const isRequired = !p.isBot && !p.eliminated && p.isConnected
-            const ready = !!state.nextRoundReady[p.id]
-            return (
-              <tr key={p.id} style={{ opacity: p.eliminated ? 0.45 : 1 }}>
-                <td style={{ textAlign: 'left', paddingRight: 24, paddingTop: 10, fontWeight: isMe ? 700 : 400, color: isMe ? '#fde68a' : '#d1d5db' }}>
-                  {p.name}
-                  {p.eliminated && <span style={{ marginLeft: 6, fontSize: 11, color: '#6b7280' }}>out</span>}
-                  {isRequired && (
-                    ready
-                      ? <span style={{ marginLeft: 8, fontSize: 11, color: '#6ee7b7' }}>ready</span>
-                      : <span style={{ marginLeft: 8, fontSize: 11, color: '#9ca3af' }}>waiting…</span>
-                  )}
-                </td>
-                <td style={{ paddingRight: 20, paddingTop: 10, color: '#6b7280' }}>{before}</td>
-                <td style={{ paddingRight: 20, paddingTop: 10, color: deltaColor, fontWeight: 600 }}>
-                  {deltaText}
-                </td>
-                <td style={{ paddingTop: 10, fontWeight: 700, color: isMe ? '#fde68a' : '#d1d5db' }}>{total}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+          <Fieldset legend="Scores">
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', paddingBottom: 6, fontWeight: 700 }}></th>
+                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>before</th>
+                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>this round</th>
+                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>{totalLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map(p => {
+                  const delta = state.roundScoreDelta[p.id] ?? 0
+                  const total = state.scores[p.id] ?? 0
+                  const before = isChips ? total - delta : total - delta
+                  const isMe = p.id === myPlayerId
+                  const isRoundWinner = p.id === state.roundWinnerId
+                  let deltaText = '-'
+                  let deltaColor = '#666'
+                  if (isChips) {
+                    if (delta > 0) { deltaText = `+${delta}`; deltaColor = '#080' }
+                    else if (delta < 0) { deltaText = `${delta}`; deltaColor = '#a00' }
+                  } else {
+                    if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = '#a00' }
+                  }
+                  const isRequired = !p.isBot && !p.eliminated && p.isConnected
+                  const ready = !!state.nextRoundReady[p.id]
+                  return (
+                    <tr key={p.id} style={{ opacity: p.eliminated ? 0.5 : 1 }}>
+                      <td style={{ paddingTop: 4, fontWeight: isMe ? 700 : 400 }}>
+                        {p.name}
+                        {p.eliminated && <span style={{ marginLeft: 6, color: '#666', fontSize: 11 }}>out</span>}
+                        {isRequired && (
+                          ready
+                            ? <span style={{ marginLeft: 6, color: '#080', fontSize: 11 }}>ready</span>
+                            : <span style={{ marginLeft: 6, color: '#666', fontSize: 11 }}>waiting...</span>
+                        )}
+                      </td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', color: '#666' }}>{before}</td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', color: deltaColor, fontWeight: 700 }}>
+                        {deltaText}
+                      </td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>{total}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Fieldset>
 
-      {isEliminated && (
-        <p style={{ color: '#fca5a5', fontWeight: 600, margin: 0, fontSize: 15 }}>
-          You've been eliminated — {isChips ? 'out of chips' : `${state.options.threshold} points reached`}.
-        </p>
-      )}
-
-      {roundEvents.length > 0 && (
-        <EventLog events={roundEvents} players={state.players} myPlayerId={myPlayerId} />
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 4 }}>
-        {canReady && !meReady && (
-          <button onClick={onReady} style={roundBtn('#16a34a')}>Start next round</button>
-        )}
-        {canReady && meReady && waitingFor.length > 0 && (
-          <span style={{ fontSize: 13, color: '#9ca3af' }}>
-            Ready ✓ — waiting for {waitingFor.map(p => p.name).join(', ')}
-          </span>
-        )}
-        <div style={{ display: 'flex', gap: 10 }}>
           {isEliminated && (
-            <button onClick={onSpectate} style={roundBtn('#16a34a')}>Spectate</button>
+            <p style={{ color: '#a00', fontWeight: 700, margin: '8px 0', fontSize: 12 }}>
+              You&apos;ve been eliminated - {isChips ? 'out of chips' : `${state.options.threshold} points reached`}.
+            </p>
           )}
-          <button onClick={onLeave} style={roundBtn('rgba(255,255,255,0.1)')}>Leave</button>
+
+          {roundEvents.length > 0 && (
+            <>
+              <div style={{ height: 8 }} />
+              <EventLog events={roundEvents} players={state.players} myPlayerId={myPlayerId} />
+            </>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 12 }}>
+            {canReady && !meReady && (
+              <Button onClick={onReady} style={{ minWidth: 160, fontWeight: 700 }}>Start next round</Button>
+            )}
+            {canReady && meReady && waitingFor.length > 0 && (
+              <span style={{ fontSize: 11, color: '#444' }}>
+                Ready - waiting for {waitingFor.map(p => p.name).join(', ')}
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {isEliminated && (
+                <Button onClick={onSpectate}>Spectate</Button>
+              )}
+              <Button onClick={onLeave}>Leave</Button>
+            </div>
+          </div>
         </div>
-      </div>
+      </Frame>
     </div>
   )
 }
 
-// Slice the event log to only events from the most recent round (or game start).
 function currentRoundEvents(events: ClientGameState['events']): ClientGameState['events'] {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]
@@ -393,40 +402,27 @@ function currentRoundEvents(events: ClientGameState['events']): ClientGameState[
   return events
 }
 
-function roundBtn(bg: string): React.CSSProperties {
-  return {
-    padding: '10px 24px',
-    fontSize: 15,
-    fontWeight: 700,
-    borderRadius: 8,
-    border: 'none',
-    backgroundColor: bg,
-    color: '#fff',
-    cursor: 'pointer',
-  }
-}
-
 const SUIT_SYMBOL: Record<string, string> = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' }
-const SUIT_COLOR: Record<string, string> = { clubs: '#9ca3af', diamonds: '#f87171', hearts: '#f87171', spades: '#9ca3af' }
+const SUIT_COLOR: Record<string, string> = { clubs: '#000', diamonds: '#a00', hearts: '#a00', spades: '#000' }
 
 function fmt(card: Card) { return `${card.rank}${SUIT_SYMBOL[card.suit]}` }
 
 function CardList({ cards, label }: { cards: Card[]; label: string }) {
   return (
-    <div style={{ marginBottom: 8 }}>
-      <span style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+    <div style={{ marginBottom: 6 }}>
+      <span style={{ color: '#444', fontSize: 11, fontWeight: 700 }}>
         {label} ({cards.length})
       </span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 2 }}>
         {cards.length === 0
-          ? <span style={{ color: '#4b5563', fontSize: 12 }}>—</span>
+          ? <span style={{ color: '#888', fontSize: 11 }}>—</span>
           : cards.map((c, i) => (
             <span key={i} style={{
               color: SUIT_COLOR[c.suit],
-              backgroundColor: '#1f2937',
-              padding: '1px 6px',
-              borderRadius: 4,
-              fontSize: 12,
+              backgroundColor: '#fff',
+              border: '1px solid #888',
+              padding: '0 4px',
+              fontSize: 11,
               fontFamily: 'monospace',
             }}>{fmt(c)}</span>
           ))
@@ -439,82 +435,80 @@ function CardList({ cards, label }: { cards: Card[]; label: string }) {
 function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlayerId: string; onClose: () => void }) {
   const currentId = state.playerOrder[state.currentPlayerIndex]
   return (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 9999, overflow: 'auto', padding: 24 }} onClick={onClose}>
-      <div style={{ maxWidth: 860, margin: '0 auto', backgroundColor: '#111827', borderRadius: 10, padding: 24, color: '#f9fafb' }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, overflow: 'auto', padding: 24 }} onClick={onClose}>
+      <div style={{ maxWidth: 860, margin: '0 auto' }} onClick={e => e.stopPropagation()}>
+        <Frame bgColor="$material" boxShadow="$out" p="$2">
+          <TitleBar title="DEBUG - FULL STATE" active>
+            <TitleBar.OptionsBox>
+              <TitleBar.Close onClick={onClose} />
+            </TitleBar.OptionsBox>
+          </TitleBar>
+          <div style={{ padding: 12, color: '#000' }}>
+            <p style={{ margin: '0 0 12px', fontSize: 11 }}>
+              phase: <b>{state.phase}</b> · turn: <b>{state.turnPhase}</b> · decks: <b>{state.deckCount}</b> · middle pile: <b>{state.middlePile.length}</b> cards
+            </p>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid #374151', paddingBottom: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#a3e635', letterSpacing: '0.05em' }}>DEBUG — FULL STATE</span>
-          <span style={{ color: '#6b7280', fontSize: 11 }}>phase: <b style={{ color: '#fff' }}>{state.phase}</b> · turn: <b style={{ color: '#fff' }}>{state.turnPhase}</b> · decks: <b style={{ color: '#fff' }}>{state.deckCount}</b> · middle pile: <b style={{ color: '#fff' }}>{state.middlePile.length}</b> cards</span>
-        </div>
-
-        {/* Players */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
-          {state.playerOrder.map(id => {
-            const p = state.players.find(pl => pl.id === id)!
-            const isCurrent = id === currentId
-            const isMe = id === myPlayerId
-            return (
-              <div key={id} style={{ backgroundColor: '#1f2937', borderRadius: 8, padding: 16, border: isCurrent ? '1px solid #a3e635' : '1px solid #374151' }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</span>
-                  {isMe && <span style={{ fontSize: 10, backgroundColor: '#065f46', color: '#6ee7b7', padding: '1px 6px', borderRadius: 4 }}>you</span>}
-                  {isCurrent && <span style={{ fontSize: 10, backgroundColor: '#78350f', color: '#fde68a', padding: '1px 6px', borderRadius: 4 }}>{state.turnPhase}</span>}
-                  {p.folded && <span style={{ fontSize: 10, backgroundColor: '#7f1d1d', color: '#fca5a5', padding: '1px 6px', borderRadius: 4 }}>folded</span>}
-                  {!p.connected && <span style={{ fontSize: 10, backgroundColor: '#374151', color: '#9ca3af', padding: '1px 6px', borderRadius: 4 }}>disconnected</span>}
-                </div>
-                <CardList cards={p.hand} label="Hand" />
-                <CardList cards={p.deck} label="Deck" />
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Current hand plays */}
-        {state.currentHandPlays.length > 0 && (
-          <div style={{ marginTop: 20, borderTop: '1px solid #374151', paddingTop: 16 }}>
-            <div style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Current hand plays</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {state.currentHandPlays.map((play, i) => {
-                const name = state.players.find(p => p.id === play.playerId)?.name ?? play.playerId
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 8 }}>
+              {state.playerOrder.map(id => {
+                const p = state.players.find(pl => pl.id === id)!
+                const isCurrent = id === currentId
+                const isMe = id === myPlayerId
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ color: '#6b7280', fontSize: 11, minWidth: 80 }}>{name}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {play.hand.cards.map((c, j) => (
-                        <span key={j} style={{ color: SUIT_COLOR[c.suit], backgroundColor: '#1f2937', padding: '1px 6px', borderRadius: 4, fontSize: 12, fontFamily: 'monospace' }}>{fmt(c)}</span>
-                      ))}
+                  <Frame key={id} bgColor="$material" boxShadow={isCurrent ? '$in' : '$out'} p="$4">
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontWeight: 700, fontSize: 12 }}>{p.name}</span>
+                      {isMe && <span style={{ fontSize: 10, backgroundColor: '#0a0', color: '#fff', padding: '0 4px' }}>you</span>}
+                      {isCurrent && <span style={{ fontSize: 10, backgroundColor: '#000080', color: '#fff', padding: '0 4px' }}>{state.turnPhase}</span>}
+                      {p.folded && <span style={{ fontSize: 10, backgroundColor: '#a00', color: '#fff', padding: '0 4px' }}>folded</span>}
+                      {!p.connected && <span style={{ fontSize: 10, backgroundColor: '#888', color: '#fff', padding: '0 4px' }}>disconnected</span>}
                     </div>
-                  </div>
+                    <CardList cards={p.hand} label="Hand" />
+                    <CardList cards={p.deck} label="Deck" />
+                  </Frame>
                 )
               })}
             </div>
-          </div>
-        )}
 
-        {/* Game event log */}
-        {state.events.length > 0 && (
-          <div style={{ marginTop: 20, borderTop: '1px solid #374151', paddingTop: 16 }}>
-            <div style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-              Game events ({state.events.length})
-            </div>
-            <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
-          </div>
-        )}
+            {state.currentHandPlays.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <Fieldset legend="Current hand plays">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 4 }}>
+                    {state.currentHandPlays.map((play, i) => {
+                      const name = state.players.find(p => p.id === play.playerId)?.name ?? play.playerId
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 11, minWidth: 80 }}>{name}</span>
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {play.hand.cards.map((c, j) => (
+                              <span key={j} style={{ color: SUIT_COLOR[c.suit], backgroundColor: '#fff', border: '1px solid #888', padding: '0 4px', fontSize: 11, fontFamily: 'monospace' }}>{fmt(c)}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </Fieldset>
+              </div>
+            )}
 
-        <div style={{ marginTop: 16, color: '#4b5563', fontSize: 11, textAlign: 'center' }}>click outside or press ` to close</div>
+            {state.events.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <EventLog events={state.events} players={state.players} myPlayerId={myPlayerId} />
+              </div>
+            )}
+
+            <div style={{ marginTop: 8, color: '#666', fontSize: 10, textAlign: 'center' }}>click outside or press ` to close</div>
+          </div>
+        </Frame>
       </div>
     </div>
   )
 }
 
-const loadingStyle: React.CSSProperties = {
+const pageStyle: React.CSSProperties = {
   minHeight: '100vh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#0f4c2a',
-  color: '#fff',
-  fontSize: 18,
-  fontFamily: 'system-ui, sans-serif',
+  padding: 20,
 }

@@ -1,3 +1,4 @@
+import { Frame } from '@react95/core'
 import type { PlayerView } from '@shared/engine/state-machine'
 import type { PlayerPresence } from '../../transport/presence'
 import type { Card as CardType } from '@shared/engine/card'
@@ -6,11 +7,10 @@ import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
 import { EventBubble } from './EventBubble'
 
-// Color-coded by strength so the table at a glance shows who's the threat.
 const DIFFICULTY_BADGE: Record<BotDifficulty, { label: string; bg: string; fg: string }> = {
-  easy:   { label: 'Easy',   bg: 'rgba(96, 165, 250, 0.18)', fg: '#93c5fd' },
-  medium: { label: 'Medium', bg: 'rgba(167, 139, 250, 0.18)', fg: '#c4b5fd' },
-  hard:   { label: 'Hard',   bg: 'rgba(248, 113, 113, 0.20)', fg: '#fca5a5' },
+  easy:   { label: 'Easy',   bg: '#000080', fg: '#fff' },
+  medium: { label: 'Medium', bg: '#680068', fg: '#fff' },
+  hard:   { label: 'Hard',   bg: '#a00000', fg: '#fff' },
 }
 
 interface OpponentAreaProps {
@@ -27,7 +27,7 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
   if (opponents.length === 0) return null
 
   return (
-    <div style={styles.row}>
+    <div style={rowStyle}>
       {opponents.map(p => (
         <OpponentSeat
           key={p.id}
@@ -44,7 +44,6 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
   )
 }
 
-// Pre-generated unique fake cards for face-down opponent hands (slot ID → unique card)
 const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'] as const
 const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
   rank: ((i % 13) + 2) as CardType['rank'],
@@ -66,21 +65,18 @@ function OpponentSeat({
   const deckCount = player.deckSize
   const deckLayers = Math.min(deckCount, 4)
 
-  // Build display slots from presence if available and count matches, else default order
   const handOrder: number[] =
     presence && presence.handOrder.length === handCount
       ? presence.handOrder
       : Array.from({ length: handCount }, (_, i) => i)
 
-  // Map slot IDs → unique fake cards; presence carries the selected positions directly
   const fakeCards = handOrder.map((_, i) => FAKE_CARDS[i % 52])
   const selectedIndices = presence?.selectedPositions ?? []
 
-  // A human who left mid-game is eliminated + disconnected; eliminated-by-score humans stay connected.
   const hasLeft = player.eliminated && !player.isBot && !player.isConnected
 
   return (
-    <div style={{ ...styles.seat, opacity: hasLeft ? 0.5 : 1 }}>
+    <div style={{ ...seatStyle, opacity: hasLeft ? 0.5 : 1 }}>
       <EventBubble
         events={events}
         playerId={player.id}
@@ -88,32 +84,49 @@ function OpponentSeat({
         players={allPlayers}
         isCurrentTurn={isActive}
       />
-      <div style={styles.nameRow}>
-        <span style={{ ...styles.dot, backgroundColor: player.isConnected ? '#4ade80' : '#6b7280' }} />
-        <span style={{ ...styles.name, color: isActive ? '#fde68a' : '#e5e7eb' }}>
+      {/* Win95 nameplate — the activated state mimics a focused titlebar */}
+      <Frame
+        bgColor={isActive ? '$headerBackground' : '$material'}
+        boxShadow="$out"
+        px="$4"
+        py="$1"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: isActive ? '#fff' : '#000',
+          fontSize: 12,
+        }}
+      >
+        <span style={{
+          width: 8, height: 8,
+          backgroundColor: player.isConnected ? '#0f0' : '#888',
+          flexShrink: 0,
+        }} />
+        <span style={{ fontWeight: 700 }}>
           {player.name}
-          {hasLeft && <span style={styles.foldedTag}> · left</span>}
-          {!hasLeft && player.eliminated && <span style={styles.foldedTag}> · out</span>}
-          {!player.eliminated && player.folded && <span style={styles.foldedTag}> · folded</span>}
         </span>
-        {isDealer && <span style={styles.dealerBadge} title="Dealer">D</span>}
+        {hasLeft && <span style={{ opacity: 0.7 }}>· left</span>}
+        {!hasLeft && player.eliminated && <span style={{ opacity: 0.7 }}>· out</span>}
+        {!player.eliminated && player.folded && <span style={{ opacity: 0.7 }}>· folded</span>}
+        {isDealer && <span style={dealerBadgeStyle} title="Dealer">D</span>}
         {player.isBot && player.botDifficulty && (
-          <span
-            style={{
-              ...styles.difficultyBadge,
-              backgroundColor: DIFFICULTY_BADGE[player.botDifficulty].bg,
-              color: DIFFICULTY_BADGE[player.botDifficulty].fg,
-            }}
-          >
+          <span style={{
+            fontSize: 10,
+            fontWeight: 700,
+            padding: '0 5px',
+            backgroundColor: DIFFICULTY_BADGE[player.botDifficulty].bg,
+            color: DIFFICULTY_BADGE[player.botDifficulty].fg,
+          }}>
             {DIFFICULTY_BADGE[player.botDifficulty].label}
           </span>
         )}
-      </div>
+      </Frame>
 
-      <div style={styles.piles}>
-        <div style={styles.pileGroup}>
+      <div style={pilesStyle}>
+        <div style={pileGroupStyle}>
           {handCount === 0 ? (
-            <span style={styles.emptyLabel}>empty</span>
+            <span style={emptyLabelStyle}>empty</span>
           ) : (
             <Hand
               cards={fakeCards}
@@ -127,14 +140,13 @@ function OpponentSeat({
           )}
         </div>
 
-        <div style={styles.pileDivider} />
+        <div style={pileDividerStyle} />
 
-        {/* Deck: stacked pile with count */}
-        <div style={styles.pileGroup}>
+        <div style={pileGroupStyle}>
           <div style={{ position: 'relative', width: 80 + deckLayers * 3, height: 112 + deckLayers * 3 }}>
             {deckCount === 0 ? (
-              <div style={styles.deckPlaceholder}>
-                <span style={styles.emptyLabel}>empty</span>
+              <div style={deckPlaceholderStyle}>
+                <span style={emptyLabelStyle}>empty</span>
               </div>
             ) : (
               Array.from({ length: deckLayers }).map((_, i) => (
@@ -144,101 +156,74 @@ function OpponentSeat({
               ))
             )}
           </div>
-          <span style={styles.deckCount}>{deckCount} in deck</span>
+          <span style={{ fontSize: 11, color: '#cfd6cf', fontWeight: 500 }}>{deckCount} in deck</span>
         </div>
       </div>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  row: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: 48,
-    padding: '14px 24px 8px',
-    flexShrink: 0,
-  },
-  seat: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-  },
-  nameRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    flexShrink: 0,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  foldedTag: {
-    fontSize: 12,
-    fontWeight: 400,
-    color: '#9ca3af',
-  },
-  difficultyBadge: {
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: '0.05em',
-    padding: '2px 6px',
-    borderRadius: 4,
-  },
-  dealerBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 18,
-    height: 18,
-    borderRadius: '50%',
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#1f2937',
-    backgroundColor: '#fde68a',
-    flexShrink: 0,
-  },
-  piles: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  pileGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-  },
-  pileDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignSelf: 'center',
-  },
-  emptyLabel: {
-    fontSize: 11,
-    color: '#4b5563',
-    fontStyle: 'italic',
-  },
-  deckPlaceholder: {
-    width: 80,
-    height: 112,
-    borderRadius: 8,
-    border: '2px dashed rgba(255,255,255,0.15)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deckCount: {
-    fontSize: 11,
-    color: '#6b7280',
-    fontWeight: 500,
-  },
+const rowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  gap: 48,
+  padding: '14px 24px 8px',
+  flexShrink: 0,
+}
+
+const seatStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+}
+
+const dealerBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  borderRadius: '50%',
+  fontSize: 10,
+  fontWeight: 700,
+  color: '#000',
+  backgroundColor: '#fde68a',
+  border: '1px solid #000',
+  flexShrink: 0,
+}
+
+const pilesStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 16,
+}
+
+const pileGroupStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 4,
+}
+
+const pileDividerStyle: React.CSSProperties = {
+  width: 1,
+  height: 40,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  alignSelf: 'center',
+}
+
+const emptyLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: '#cfd6cf',
+  fontStyle: 'italic',
+}
+
+const deckPlaceholderStyle: React.CSSProperties = {
+  width: 80,
+  height: 112,
+  border: '2px dashed rgba(255,255,255,0.25)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 }

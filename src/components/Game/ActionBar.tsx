@@ -1,3 +1,4 @@
+import { Frame, Button } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { Card } from '@shared/engine/card'
 import { evaluateHand, beats, HandCategory } from '@shared/engine/hand-eval'
@@ -25,8 +26,8 @@ interface ActionBarProps {
   state: ClientGameState
   myPlayerId: string
   selected: Card[]
-  onDiscard: () => void   // sends DISCARD with selected cards (discard phase only)
-  onPlay: () => void      // sends PLAY (auto-skips discard if needed)
+  onDiscard: () => void
+  onPlay: () => void
   onFold: () => void
 }
 
@@ -39,119 +40,64 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
   const isValidHand = evaluated !== null
   const doesBeat = isValidHand && (state.currentTopPlay === null || beats(evaluated, state.currentTopPlay))
 
-  // Discard: only in discard phase, only when cards are selected, and only if there's a deck to draw from
   const canDiscard = isMyTurn && inDiscard && selected.length > 0 && !deckEmpty
-
-  // Play: valid hand that beats top. Works in either phase (auto-skips discard if needed).
   const canPlay = isMyTurn && isValidHand && doesBeat
-
-  // Fold: any time it's your turn (auto-skips discard phase if needed)
   const canFold = isMyTurn
 
-  // Hint
   let hint = ''
   if (!isMyTurn) {
-    hint = 'Waiting for other players…'
+    hint = 'Waiting for other players...'
   } else if (selected.length === 0) {
     hint = inDiscard && !deckEmpty
       ? 'Select cards to discard, or select cards to play directly'
       : 'Select cards to play, or fold'
   } else if (!isValidHand) {
     hint = deckEmpty
-      ? 'Not a valid hand — your deck is empty, keep selecting or fold'
-      : 'Not a valid hand — keep selecting or discard instead'
+      ? 'Not a valid hand - your deck is empty, keep selecting or fold'
+      : 'Not a valid hand - keep selecting or discard instead'
   } else if (!doesBeat) {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} — doesn't beat the current play`
+    hint = `${CATEGORY_LABEL[evaluated!.category]} - doesn't beat the current play`
   } else if (state.currentTopPlay === null) {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} — leads the hand`
+    hint = `${CATEGORY_LABEL[evaluated!.category]} - leads the hand`
   } else {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} — beats it`
+    hint = `${CATEGORY_LABEL[evaluated!.category]} - beats it`
   }
 
-  const hintColor = !isMyTurn
-    ? '#6b7280'
-    : canPlay
-      ? '#86efac'
-      : isValidHand && !doesBeat
-        ? '#fca5a5'
-        : '#9ca3af'
-
   return (
-    <div style={styles.bar}>
-      <span style={{ ...styles.hint, color: hintColor }}>{hint}</span>
-      <div style={styles.btnRow}>
-        <Btn
-          label="Play"
-          enabled={canPlay}
-          variant="primary"
-          onClick={onPlay}
-        />
-        <Btn
-          label={`Discard ${selected.length}`}
-          enabled={canDiscard}
-          variant="secondary"
-          onClick={onDiscard}
-        />
-        <Btn
-          label="Fold"
-          enabled={canFold}
-          variant="danger"
-          onClick={onFold}
-        />
-      </div>
-    </div>
-  )
-}
-
-function Btn({ label, enabled, variant, onClick }: {
-  label: string
-  enabled: boolean
-  variant: 'primary' | 'secondary' | 'danger'
-  onClick: () => void
-}) {
-  const bg =    { primary: '#16a34a', secondary: 'rgba(255,255,255,0.12)', danger: 'rgba(255,255,255,0.08)' }[variant]
-  const color = { primary: '#fff',    secondary: '#e5e7eb',                danger: '#fca5a5'                }[variant]
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={!enabled}
+    <Frame
+      px="$6"
+      py="$4"
       style={{
-        padding: '10px 22px',
-        fontSize: 15,
-        fontWeight: 700,
-        borderRadius: 8,
-        border: 'none',
-        cursor: enabled ? 'pointer' : 'default',
-        backgroundColor: bg,
-        color,
-        opacity: enabled ? 1 : 0.3,
-        transition: 'opacity 0.1s',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 0,
+        backgroundColor: 'transparent',
       }}
     >
-      {label}
-    </button>
+      <span style={{
+        fontSize: 12,
+        textAlign: 'center',
+        minHeight: 16,
+        color: !isMyTurn ? '#cfd6cf'
+          : canPlay ? '#86efac'
+          : isValidHand && !doesBeat ? '#fca5a5'
+          : '#e5e7eb',
+      }}>
+        {hint}
+      </span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Button onClick={onPlay} disabled={!canPlay} style={{ minWidth: 80, fontWeight: 700 }}>
+          Play
+        </Button>
+        <Button onClick={onDiscard} disabled={!canDiscard} style={{ minWidth: 90 }}>
+          Discard {selected.length > 0 ? selected.length : ''}
+        </Button>
+        <Button onClick={onFold} disabled={!canFold} style={{ minWidth: 80 }}>
+          Fold
+        </Button>
+      </div>
+    </Frame>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  bar: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 10,
-    padding: '12px 24px',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
-    flexShrink: 0,
-  },
-  hint: {
-    fontSize: 13,
-    textAlign: 'center',
-    minHeight: 18,
-  },
-  btnRow: {
-    display: 'flex',
-    gap: 10,
-  },
 }

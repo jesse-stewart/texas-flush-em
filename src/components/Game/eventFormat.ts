@@ -64,7 +64,8 @@ export function formatEvent(
 }
 
 // Latest event for a specific player, scanning newest-first. Skips events with no playerId.
-export function latestEventForPlayer(events: GameEvent[], playerId: string): GameEvent | null {
+export function latestEventForPlayer(events: GameEvent[] | undefined, playerId: string): GameEvent | null {
+  if (!events) return null
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]
     if ('playerId' in e && e.playerId === playerId) return e

@@ -1,11 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Frame, TitleBar, Button, Input, Fieldset } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
 import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
 
-// Persist game settings across sessions so the lobby form remembers what the user
-// last picked. We store the *user's* values (e.g. mixedCards before clamping) — the
-// component re-clamps on load against the current player count.
 const SETTINGS_KEY = 'flushem_settings'
 
 interface PersistedSettings {
@@ -19,8 +17,6 @@ interface PersistedSettings {
   mixedCards: number
 }
 
-// Numeric input with +/- buttons. Typed input is held as a draft string and only
-// clamped/committed on blur or Enter, so editing "52" → "26" doesn't re-clamp on each keystroke.
 function NumberStepper({
   value, min, max, onChange,
 }: {
@@ -30,7 +26,6 @@ function NumberStepper({
   onChange: (v: number) => void
 }) {
   const [draft, setDraft] = useState(String(value))
-  // Sync draft when value changes externally (+/-, prop change, parent clamp)
   useEffect(() => { setDraft(String(value)) }, [value])
 
   const clamp = (v: number) => {
@@ -40,15 +35,14 @@ function NumberStepper({
 
   function commit() {
     const v = parseInt(draft, 10)
-    if (isNaN(v)) setDraft(String(value))   // revert empty / non-numeric
+    if (isNaN(v)) setDraft(String(value))
     else onChange(clamp(v))
   }
 
   return (
-    <div style={styles.stepper}>
-      <button type="button" style={styles.stepBtn} onClick={() => onChange(clamp(value - 1))} aria-label="decrease">−</button>
-      <input
-        style={styles.stepperValue}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Button onClick={() => onChange(clamp(value - 1))} aria-label="decrease" style={{ minWidth: 24, padding: '0 6px' }}>−</Button>
+      <Input
         type="number"
         min={min}
         max={max}
@@ -56,8 +50,35 @@ function NumberStepper({
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        style={{ width: 56, textAlign: 'center' }}
       />
-      <button type="button" style={styles.stepBtn} onClick={() => onChange(clamp(value + 1))} aria-label="increase">+</button>
+      <Button onClick={() => onChange(clamp(value + 1))} aria-label="increase" style={{ minWidth: 24, padding: '0 6px' }}>+</Button>
+    </div>
+  )
+}
+
+function Segmented<T extends string | number>({
+  options, value, onChange,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 2 }}>
+      {options.map(opt => {
+        const active = opt.value === value
+        return (
+          <Button
+            key={String(opt.value)}
+            onClick={() => onChange(opt.value)}
+            className={active ? 'r95-pressed' : undefined}
+            style={{ minWidth: 56 }}
+          >
+            {opt.label}
+          </Button>
+        )
+      })}
     </div>
   )
 }
@@ -80,7 +101,6 @@ const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
   hard: 'Hard',
 }
 
-// Per-mode threshold defaults so toggling modes doesn't lose the user's chosen number.
 const DEFAULT_POINTS_TARGET = 26
 const DEFAULT_CHIPS_STARTING = 13
 
@@ -108,25 +128,19 @@ function loadSettings(): PersistedSettings {
 function saveSettings(s: PersistedSettings) {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
-  } catch { /* quota / private mode — silently ignore */ }
+  } catch { /* quota / private mode */ }
 }
 
-// Estimator constants — per-player time per round, calibrated from real play.
-// Humans deliberate; bots return decisions in roughly a couple of seconds.
 const HUMAN_MIN_PER_ROUND = 2.5
 const BOT_MIN_PER_ROUND = 0.05
-const AVG_CARDS_PER_LOSS = 3   // typical hand size of a losing player at round end
+const AVG_CARDS_PER_LOSS = 3
 
 function estimateMinutes(opts: GameOptions, humansCount: number, botsCount: number): number | null {
   const playerCount = humansCount + botsCount
   if (playerCount < 2) return null
   const minPerRound = humansCount * HUMAN_MIN_PER_ROUND + botsCount * BOT_MIN_PER_ROUND
-  // Avg points/chips a player gains-or-loses per round (probability of losing × cards lost).
   const lossPerRound = AVG_CARDS_PER_LOSS * (playerCount - 1) / playerCount
-  // Rounds for one player to hit threshold (points) or hit zero from threshold chips.
   const roundsToFirstHit = opts.threshold / lossPerRound
-  // Tail factor — "play continues until 1 remains" modes need to elim (n-1) players,
-  // but later eliminations happen faster as the field shrinks. Sub-linear in playerCount.
   const isFirstHitOnly =
     opts.scoringMode === 'points' && opts.pointsThresholdAction === 'end_game'
   const tail = isFirstHitOnly ? 1 : 1 + 0.5 * (playerCount - 2)
@@ -145,8 +159,6 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const canAddBot = state.players.length < 4
   const [copied, setCopied] = useState(false)
 
-  // Local options state — whoever clicks Start sends their chosen settings to the server.
-  // Initial values come from localStorage so the lobby remembers the user's last picks.
   const initial = useMemo(loadSettings, [])
   const [scoringMode, setScoringMode] = useState<GameOptions['scoringMode']>(initial.scoringMode)
   const [pointsTarget, setPointsTarget] = useState(initial.pointsTarget)
@@ -165,14 +177,12 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   }, [scoringMode, pointsTarget, chipsStarting, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
 
   const playerCount = Math.max(state.players.length, 1)
-
-  // Mixed mode: clamp cards-per-player so the deal always succeeds.
   const mixedMaxCards = Math.floor((mixedDeckCount * 52) / playerCount)
   const effectiveMixedCards = Math.min(mixedCards, mixedMaxCards)
   const cardsPerPlayer =
     dealMode === 'personal' ? personalCards :
     dealMode === 'mixed' ? effectiveMixedCards :
-    Math.ceil(52 / playerCount)  // classic — readonly display
+    Math.ceil(52 / playerCount)
 
   const threshold = scoringMode === 'points' ? pointsTarget : chipsStarting
   const options: GameOptions = {
@@ -200,503 +210,202 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.panel}>
-        <h1 style={styles.title}>Texas Flush'em</h1>
+    <div style={pageStyle}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: 420 }}>
+        <TitleBar title="Texas Flush'em - Lobby" active />
+        <div style={{ padding: 12 }}>
 
-        <div style={styles.roomRow}>
-          <span style={styles.roomLabel}>Room code</span>
-          {password && <span style={styles.lockTag} title="Password protected">🔒</span>}
-          <span style={styles.roomCode}>{roomId}</span>
-          <button style={styles.copyBtn} onClick={copyCode}>
-            Copy
-          </button>
-        </div>
+          <Fieldset legend="Room">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 4 }}>
+              <span style={{ fontSize: 12 }}>Code:</span>
+              <Frame bgColor="$inputBackground" boxShadow="$in" px="$4" py="$2" style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', flex: 1 }}>
+                {roomId}{password && ' [LOCK]'}
+              </Frame>
+              <Button onClick={copyCode}>Copy</Button>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <Button onClick={copyLink} style={{ width: '100%' }}>
+                {copied ? 'Link copied!' : password ? 'Copy invite link (incl. password)' : 'Copy invite link'}
+              </Button>
+            </div>
+          </Fieldset>
 
-        <button style={styles.shareLinkBtn} onClick={copyLink}>
-          {copied ? '✓ Link copied!' : password ? 'Copy invite link (incl. password)' : 'Copy invite link'}
-        </button>
+          <div style={{ height: 8 }} />
 
-        <h2 style={styles.sectionTitle}>
-          Players ({state.players.length}/4)
-        </h2>
-
-        <ul style={styles.playerList}>
-          {state.players.map(p => (
-            <li key={p.id} style={styles.playerRow}>
-              <span style={styles.dot(p.isConnected)} />
-              <span style={styles.playerName}>
-                {p.name}
-                {p.id === myPlayerId && <span style={styles.youTag}> (you)</span>}
-                {p.isBot && <span style={styles.botTag}>CPU</span>}
-              </span>
-              {p.isBot && (
-                <>
-                  <select
-                    style={styles.difficultySelect}
-                    value={p.botDifficulty ?? DEFAULT_BOT_DIFFICULTY}
-                    onChange={e => onSetBotDifficulty(p.id, e.target.value as BotDifficulty)}
-                    aria-label={`${p.name} difficulty`}
-                  >
-                    {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
-                      <option key={d} value={d}>{BOT_DIFFICULTY_LABELS[d]}</option>
-                    ))}
-                  </select>
-                  <button
-                    style={styles.kickBtn}
-                    onClick={() => onRemoveBot(p.id)}
-                    aria-label={`Remove ${p.name}`}
-                  >
-                    ×
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-          {Array.from({ length: 4 - state.players.length }).map((_, i) => (
-            <li key={`empty-${i}`} style={styles.playerRow}>
-              {i === 0 && canAddBot ? (
-                <div style={styles.addBotRow}>
-                  <span style={styles.addBotLabel}>+ Add CPU</span>
-                  {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      style={styles.addBotDiffBtn}
-                      onClick={() => onAddBot(d)}
-                    >
-                      {BOT_DIFFICULTY_LABELS[d]}
-                    </button>
-                  ))}
+          <Fieldset legend={`Players (${state.players.length}/4)`}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 4 }}>
+              {state.players.map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <span style={{ width: 8, height: 8, backgroundColor: p.isConnected ? '#0a0' : '#888', display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ fontWeight: 700 }}>{p.name}</span>
+                  {p.id === myPlayerId && <span style={{ color: '#444' }}>(you)</span>}
+                  {p.isBot && <span style={{ background: '#000080', color: '#fff', padding: '0 4px', fontWeight: 700 }}>CPU</span>}
+                  {p.isBot && (
+                    <>
+                      <select
+                        value={p.botDifficulty ?? DEFAULT_BOT_DIFFICULTY}
+                        onChange={e => onSetBotDifficulty(p.id, e.target.value as BotDifficulty)}
+                        aria-label={`${p.name} difficulty`}
+                        style={{ marginLeft: 'auto', fontSize: 11 }}
+                      >
+                        {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
+                          <option key={d} value={d}>{BOT_DIFFICULTY_LABELS[d]}</option>
+                        ))}
+                      </select>
+                      <Button onClick={() => onRemoveBot(p.id)} aria-label={`Remove ${p.name}`} style={{ minWidth: 22, padding: '0 4px' }}>×</Button>
+                    </>
+                  )}
                 </div>
-              ) : (
-                <>
-                  <span style={{ ...styles.dot(false), opacity: 0.35 }} />
-                  <span style={{ ...styles.playerName, opacity: 0.35 }}>Waiting for player…</span>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        <h2 style={styles.sectionTitle}>Game settings</h2>
-
-        <div style={styles.settingsBlock}>
-          <div style={styles.settingRow}>
-            <span style={styles.settingLabel}>Scoring</span>
-            <div style={styles.segmented}>
-              <button
-                type="button"
-                style={styles.segmentBtn(scoringMode === 'points')}
-                onClick={() => setScoringMode('points')}
-              >
-                Points
-              </button>
-              <button
-                type="button"
-                style={styles.segmentBtn(scoringMode === 'chips')}
-                onClick={() => setScoringMode('chips')}
-              >
-                Chips
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.settingRow}>
-            <span style={styles.settingLabel}>
-              {scoringMode === 'points' ? 'Target points' : 'Starting chips'}
-            </span>
-            <NumberStepper
-              value={threshold}
-              min={1}
-              onChange={v => {
-                if (scoringMode === 'points') setPointsTarget(v)
-                else setChipsStarting(v)
-              }}
-            />
-          </div>
-
-          {scoringMode === 'points' && (
-            <div style={styles.settingRow}>
-              <span style={styles.settingLabel}>On reach</span>
-              <div style={styles.segmented}>
-                <button
-                  type="button"
-                  style={styles.segmentBtn(pointsThresholdAction === 'eliminate')}
-                  onClick={() => setPointsThresholdAction('eliminate')}
-                >
-                  Eliminate
-                </button>
-                <button
-                  type="button"
-                  style={styles.segmentBtn(pointsThresholdAction === 'end_game')}
-                  onClick={() => setPointsThresholdAction('end_game')}
-                >
-                  End game
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div style={styles.settingRow}>
-            <span style={styles.settingLabel}>Deal mode</span>
-            <div style={styles.segmented}>
-              <button type="button" style={styles.segmentBtn(dealMode === 'classic')} onClick={() => setDealMode('classic')}>Classic</button>
-              <button type="button" style={styles.segmentBtn(dealMode === 'personal')} onClick={() => setDealMode('personal')}>Personal</button>
-              <button type="button" style={styles.segmentBtn(dealMode === 'mixed')} onClick={() => setDealMode('mixed')}>Mixed</button>
-            </div>
-          </div>
-
-          {dealMode === 'classic' && (
-            <div style={styles.settingRow}>
-              <span style={styles.settingLabel}>Cards each</span>
-              <span style={styles.readOnlyValue}>{cardsPerPlayer} (auto)</span>
-            </div>
-          )}
-
-          {dealMode === 'personal' && (
-            <div style={styles.settingRow}>
-              <span style={styles.settingLabel}>Cards per player</span>
-              <NumberStepper
-                value={personalCards}
-                min={MIN_CARDS_PER_PLAYER}
-                max={PERSONAL_MAX_CARDS}
-                onChange={setPersonalCards}
-              />
-            </div>
-          )}
-
-          {dealMode === 'mixed' && (
-            <>
-              <div style={styles.settingRow}>
-                <span style={styles.settingLabel}>Decks</span>
-                <div style={styles.segmented}>
-                  {[1, 2, 3, 4].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      style={styles.segmentBtn(mixedDeckCount === n)}
-                      onClick={() => setMixedDeckCount(n)}
-                    >
-                      {n}
-                    </button>
-                  ))}
+              ))}
+              {Array.from({ length: 4 - state.players.length }).map((_, i) => (
+                <div key={`empty-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  {i === 0 && canAddBot ? (
+                    <>
+                      <span style={{ flex: 1, color: '#444' }}>+ Add CPU:</span>
+                      {(['easy', 'medium', 'hard'] as BotDifficulty[]).map(d => (
+                        <Button key={d} onClick={() => onAddBot(d)} style={{ padding: '0 8px' }}>
+                          {BOT_DIFFICULTY_LABELS[d]}
+                        </Button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ width: 8, height: 8, backgroundColor: '#bbb', display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ color: '#888', fontStyle: 'italic' }}>Waiting for player...</span>
+                    </>
+                  )}
                 </div>
-              </div>
-              <div style={styles.settingRow}>
-                <span style={styles.settingLabel}>Cards per player</span>
-                <NumberStepper
-                  value={effectiveMixedCards}
-                  min={MIN_CARDS_PER_PLAYER}
-                  max={mixedMaxCards}
-                  onChange={setMixedCards}
+              ))}
+            </div>
+          </Fieldset>
+
+          <div style={{ height: 8 }} />
+
+          <Fieldset legend="Game settings">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 4 }}>
+              <SettingRow label="Scoring">
+                <Segmented
+                  options={[{ value: 'points', label: 'Points' }, { value: 'chips', label: 'Chips' }]}
+                  value={scoringMode}
+                  onChange={setScoringMode}
                 />
-              </div>
-              {effectiveMixedCards < mixedCards && (
-                <p style={styles.estimate}>Capped at {mixedMaxCards} (pool size ÷ players).</p>
-              )}
-            </>
-          )}
+              </SettingRow>
 
-          {estMin !== null && (
-            <p style={styles.estimate}>
-              Estimated game length: <b>{formatDuration(estMin)}</b>
+              <SettingRow label={scoringMode === 'points' ? 'Target points' : 'Starting chips'}>
+                <NumberStepper
+                  value={threshold}
+                  min={1}
+                  onChange={v => {
+                    if (scoringMode === 'points') setPointsTarget(v)
+                    else setChipsStarting(v)
+                  }}
+                />
+              </SettingRow>
+
+              {scoringMode === 'points' && (
+                <SettingRow label="On reach">
+                  <Segmented
+                    options={[{ value: 'eliminate', label: 'Eliminate' }, { value: 'end_game', label: 'End game' }]}
+                    value={pointsThresholdAction}
+                    onChange={setPointsThresholdAction}
+                  />
+                </SettingRow>
+              )}
+
+              <SettingRow label="Deal mode">
+                <Segmented
+                  options={[
+                    { value: 'classic', label: 'Classic' },
+                    { value: 'personal', label: 'Personal' },
+                    { value: 'mixed', label: 'Mixed' },
+                  ]}
+                  value={dealMode}
+                  onChange={setDealMode}
+                />
+              </SettingRow>
+
+              {dealMode === 'classic' && (
+                <SettingRow label="Cards each">
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{cardsPerPlayer} (auto)</span>
+                </SettingRow>
+              )}
+
+              {dealMode === 'personal' && (
+                <SettingRow label="Cards per player">
+                  <NumberStepper
+                    value={personalCards}
+                    min={MIN_CARDS_PER_PLAYER}
+                    max={PERSONAL_MAX_CARDS}
+                    onChange={setPersonalCards}
+                  />
+                </SettingRow>
+              )}
+
+              {dealMode === 'mixed' && (
+                <>
+                  <SettingRow label="Decks">
+                    <Segmented
+                      options={[1, 2, 3, 4].map(n => ({ value: n, label: String(n) }))}
+                      value={mixedDeckCount}
+                      onChange={setMixedDeckCount}
+                    />
+                  </SettingRow>
+                  <SettingRow label="Cards per player">
+                    <NumberStepper
+                      value={effectiveMixedCards}
+                      min={MIN_CARDS_PER_PLAYER}
+                      max={mixedMaxCards}
+                      onChange={setMixedCards}
+                    />
+                  </SettingRow>
+                  {effectiveMixedCards < mixedCards && (
+                    <p style={{ margin: 0, fontSize: 11, color: '#444', textAlign: 'right' }}>
+                      Capped at {mixedMaxCards} (pool size / players).
+                    </p>
+                  )}
+                </>
+              )}
+
+              {estMin !== null && (
+                <p style={{ margin: 0, fontSize: 11, color: '#444', textAlign: 'right' }}>
+                  Estimated game length: <b>{formatDuration(estMin)}</b>
+                </p>
+              )}
+            </div>
+          </Fieldset>
+
+          {!canStart && (
+            <p style={{ fontSize: 12, margin: '8px 0 4px', textAlign: 'center', color: '#444' }}>
+              Need at least 2 players to start.
             </p>
           )}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Button onClick={() => onStart(options)} disabled={!canStart} style={{ flex: 1, fontWeight: 700 }}>
+              Start game
+            </Button>
+            <Button onClick={onLeave}>Leave</Button>
+          </div>
         </div>
-
-        {!canStart && (
-          <p style={styles.hint}>Need at least 2 players to start.</p>
-        )}
-
-        <button
-          style={{ ...styles.startBtn, opacity: canStart ? 1 : 0.4 }}
-          onClick={() => onStart(options)}
-          disabled={!canStart}
-        >
-          Start game
-        </button>
-        <button style={styles.leaveBtn} onClick={onLeave}>
-          Leave room
-        </button>
-      </div>
+      </Frame>
     </div>
   )
 }
 
-const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0f4c2a',
-    fontFamily: 'system-ui, sans-serif',
-    padding: '20px 0',
-  } as React.CSSProperties,
-  panel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: '40px 48px',
-    width: 360,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-  } as React.CSSProperties,
-  title: {
-    margin: '0 0 20px',
-    fontSize: 28,
-    fontWeight: 800,
-    color: '#1a1a1a',
-    letterSpacing: '-1px',
-  } as React.CSSProperties,
-  roomRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 28,
-    padding: '10px 14px',
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    border: '1px solid #e5e7eb',
-  } as React.CSSProperties,
-  roomLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-    flex: 1,
-  } as React.CSSProperties,
-  roomCode: {
-    fontSize: 18,
-    fontWeight: 800,
-    letterSpacing: '0.15em',
-    color: '#111827',
-    fontFamily: 'monospace',
-  } as React.CSSProperties,
-  lockTag: {
-    fontSize: 13,
-    color: '#6b7280',
-  } as React.CSSProperties,
-  copyBtn: {
-    fontSize: 12,
-    padding: '3px 8px',
-    borderRadius: 4,
-    border: '1px solid #d1d5db',
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-    color: '#374151',
-  } as React.CSSProperties,
-  shareLinkBtn: {
-    width: '100%',
-    padding: '8px',
-    fontSize: 13,
-    fontWeight: 600,
-    borderRadius: 8,
-    border: '1px solid #d1d5db',
-    backgroundColor: '#f9fafb',
-    color: '#374151',
-    cursor: 'pointer',
-    marginBottom: 20,
-  } as React.CSSProperties,
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#6b7280',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-    margin: '0 0 12px',
-  } as React.CSSProperties,
-  playerList: {
-    listStyle: 'none',
-    margin: '0 0 24px',
-    padding: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 10,
-  } as React.CSSProperties,
-  playerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-  } as React.CSSProperties,
-  dot: (connected: boolean): React.CSSProperties => ({
-    width: 9,
-    height: 9,
-    borderRadius: '50%',
-    backgroundColor: connected ? '#16a34a' : '#9ca3af',
-    flexShrink: 0,
-  }),
-  playerName: {
-    fontSize: 15,
-    color: '#111827',
-  } as React.CSSProperties,
-  youTag: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: 400,
-  } as React.CSSProperties,
-  botTag: {
-    marginLeft: 8,
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: '0.05em',
-    backgroundColor: '#ede9fe',
-    color: '#6d28d9',
-    padding: '2px 6px',
-    borderRadius: 4,
-  } as React.CSSProperties,
-  kickBtn: {
-    marginLeft: 'auto',
-    width: 22,
-    height: 22,
-    fontSize: 16,
-    lineHeight: 1,
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    borderRadius: 4,
-    padding: 0,
-  } as React.CSSProperties,
-  addBotRow: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '4px 8px',
-    border: '1px dashed #c4b5fd',
-    borderRadius: 6,
-    backgroundColor: 'transparent',
-  } as React.CSSProperties,
-  addBotLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#6d28d9',
-  } as React.CSSProperties,
-  addBotDiffBtn: {
-    padding: '4px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: '#6d28d9',
-    backgroundColor: '#f5f3ff',
-    border: '1px solid #ddd6fe',
-    borderRadius: 4,
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  difficultySelect: {
-    marginLeft: 'auto',
-    fontSize: 11,
-    fontWeight: 600,
-    color: '#6d28d9',
-    backgroundColor: '#f5f3ff',
-    border: '1px solid #ddd6fe',
-    borderRadius: 4,
-    padding: '2px 4px',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  } as React.CSSProperties,
-  settingsBlock: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 10,
-    marginBottom: 20,
-  } as React.CSSProperties,
-  settingRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  } as React.CSSProperties,
-  settingLabel: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: 500,
-  } as React.CSSProperties,
-  segmented: {
-    display: 'flex',
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    overflow: 'hidden',
-  } as React.CSSProperties,
-  segmentBtn: (active: boolean): React.CSSProperties => ({
-    padding: '5px 10px',
-    fontSize: 12,
-    fontWeight: 600,
-    border: 'none',
-    backgroundColor: active ? '#111827' : '#fff',
-    color: active ? '#fff' : '#374151',
-    cursor: 'pointer',
-    borderLeft: '1px solid #d1d5db',
-  }),
-  stepper: {
-    display: 'flex',
-    alignItems: 'center',
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    overflow: 'hidden',
-  } as React.CSSProperties,
-  stepBtn: {
-    padding: '4px 10px',
-    fontSize: 14,
-    fontWeight: 700,
-    border: 'none',
-    backgroundColor: '#f9fafb',
-    color: '#374151',
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  stepperValue: {
-    width: 48,
-    textAlign: 'center' as const,
-    border: 'none',
-    borderLeft: '1px solid #d1d5db',
-    borderRight: '1px solid #d1d5db',
-    fontSize: 13,
-    fontWeight: 700,
-    padding: '4px 0',
-    outline: 'none',
-    color: '#111827',
-    backgroundColor: '#fff',
-    fontFamily: 'inherit',
-  } as React.CSSProperties,
-  estimate: {
-    margin: '4px 0 0',
-    fontSize: 12,
-    color: '#6b7280',
-    textAlign: 'right' as const,
-  } as React.CSSProperties,
-  readOnlyValue: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: 600,
-  } as React.CSSProperties,
-  hint: {
-    fontSize: 13,
-    color: '#6b7280',
-    margin: '0 0 12px',
-    textAlign: 'center' as const,
-  } as React.CSSProperties,
-  startBtn: {
-    width: '100%',
-    padding: '12px',
-    fontSize: 16,
-    fontWeight: 700,
-    borderRadius: 8,
-    border: 'none',
-    backgroundColor: '#16a34a',
-    color: '#fff',
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  leaveBtn: {
-    width: '100%',
-    padding: '8px',
-    fontSize: 13,
-    fontWeight: 600,
-    borderRadius: 8,
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    marginTop: 4,
-  } as React.CSSProperties,
+function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <span style={{ fontSize: 12 }}>{label}</span>
+      {children}
+    </div>
+  )
 }
+
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px 0',
+}
+

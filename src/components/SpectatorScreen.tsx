@@ -1,3 +1,4 @@
+import { Frame, TitleBar, Button } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { PlayerPresence } from '../transport/presence'
 import { OpponentArea } from './Game/OpponentArea'
@@ -12,86 +13,64 @@ interface SpectatorScreenProps {
 
 export function SpectatorScreen({ state, presence, onLeave, eliminated }: SpectatorScreenProps) {
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <span style={styles.logo}>Texas Flush'em</span>
-        <span style={styles.badge}>Spectating</span>
-        <button style={styles.leaveBtn} onClick={onLeave}>Leave</button>
-      </div>
+    <Frame
+      bgColor="$material"
+      boxShadow="$out"
+      p="$2"
+      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
+    >
+      <TitleBar title="Texas Flush'em - Spectating" active>
+        <TitleBar.OptionsBox>
+          <TitleBar.Close onClick={onLeave} />
+        </TitleBar.OptionsBox>
+      </TitleBar>
 
-      <OpponentArea
-        opponents={state.players}
-        allPlayers={state.players}
-        myPlayerId=""
-        currentPlayerId={state.currentPlayerId}
-        dealerId={state.dealerId}
-        presence={presence}
-        events={state.events}
-      />
+      <Frame
+        bgColor="$material"
+        px="$6"
+        py="$2"
+        style={{
+          display: 'flex',
+          gap: 12,
+          alignItems: 'center',
+          borderBottom: '1px solid #868a8e',
+          flexShrink: 0,
+          fontSize: 12,
+        }}
+      >
+        <span style={{ fontWeight: 700 }}>Spectating</span>
+        <span style={{ marginLeft: 'auto' }}>
+          <Button onClick={onLeave} style={{ minWidth: 60 }}>Leave</Button>
+        </span>
+      </Frame>
 
-      <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />
+      <Frame
+        boxShadow="$in"
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: '#006300',
+          overflow: 'hidden',
+          margin: 4,
+        }}
+      >
+        <OpponentArea
+          opponents={state.players}
+          allPlayers={state.players}
+          myPlayerId=""
+          currentPlayerId={state.currentPlayerId}
+          dealerId={state.dealerId}
+          presence={presence}
+          events={state.events}
+        />
 
-      <div style={styles.footer}>
-        <span style={styles.footerText}>{eliminated ? "You've been eliminated — watching the rest of the game" : 'Game in progress — you joined late'}</span>
-      </div>
-    </div>
+        <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />
+
+        <div style={{ marginTop: 'auto', padding: 16, textAlign: 'center', fontSize: 11, color: '#cfd6cf', fontStyle: 'italic' }}>
+          {eliminated ? "You've been eliminated - watching the rest of the game" : 'Game in progress - you joined late'}
+        </div>
+      </Frame>
+    </Frame>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: '#0f4c2a',
-    fontFamily: 'system-ui, sans-serif',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '10px 20px',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    color: '#fff',
-    flexShrink: 0,
-  },
-  logo: {
-    fontSize: 18,
-    fontWeight: 800,
-    letterSpacing: '-0.5px',
-    color: '#fff',
-    flex: 1,
-  },
-  badge: {
-    fontSize: 12,
-    fontWeight: 700,
-    padding: '3px 10px',
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    color: '#d1d5db',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  },
-  leaveBtn: {
-    padding: '4px 12px',
-    fontSize: 12,
-    fontWeight: 600,
-    borderRadius: 6,
-    border: '1px solid rgba(255,255,255,0.2)',
-    backgroundColor: 'transparent',
-    color: '#9ca3af',
-    cursor: 'pointer',
-  },
-  footer: {
-    marginTop: 'auto',
-    padding: '16px',
-    textAlign: 'center',
-    flexShrink: 0,
-  },
-  footerText: {
-    fontSize: 13,
-    color: '#4b5563',
-    fontStyle: 'italic',
-  },
 }

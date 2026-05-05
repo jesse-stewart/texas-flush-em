@@ -1,18 +1,16 @@
 import { motion, AnimatePresence } from 'framer-motion'
+import { Frame } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
 import { HandCategory } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
 
 const CARD_HEIGHT = 112
-const STACK_OFFSET = CARD_HEIGHT * 0.1   // 10% per layer within a stack
+const STACK_OFFSET = CARD_HEIGHT * 0.1
 
 interface PlayStackProps {
   plays: HandPlay[]
   myPlayerId: string
-  // Slot IDs from the player's hand that produced the *most recent* play, in card order.
-  // Used as Framer Motion layoutIds so cards FLIP from hand → table. Duplicates need
-  // distinct ids (same rank+suit can't share a layoutId or only one will animate).
   myLastPlaySlotIds: number[] | null
 }
 
@@ -24,7 +22,6 @@ function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
     <div style={{ position: 'relative', height, minWidth: 80 }}>
       <AnimatePresence>
         {plays.map((play, i) => {
-          // Only the most recent play needs FLIP source layoutIds, and only if it was mine.
           const useFlip = i === lastIndex && play.playerId === myPlayerId && myLastPlaySlotIds
           return (
             <div
@@ -89,46 +86,61 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
   const isMyTurn = state.currentPlayerId === myPlayerId
 
   return (
-    <div style={styles.area}>
-      {/* Turn indicator */}
-      <div style={styles.turnBanner}>
+    <div style={areaStyle}>
+      {/* Turn indicator — Win95 status panel */}
+      <Frame
+        bgColor="$material"
+        boxShadow="$in"
+        px="$6"
+        py="$1"
+        style={{ textAlign: 'center', minWidth: 280 }}
+      >
         {isMyTurn
-          ? <span style={styles.myTurnText}>Your turn — {state.turnPhase === 'discard' ? 'select cards to discard, or skip' : 'play a hand or fold'}</span>
-          : <span style={styles.theirTurnText}>{currentPlayer?.name ?? '…'}&apos;s turn</span>
+          ? <span style={{ color: '#a00000', fontSize: 12, fontWeight: 700 }}>
+              Your turn - {state.turnPhase === 'discard' ? 'select cards to discard, or skip' : 'play a hand or fold'}
+            </span>
+          : <span style={{ color: '#000', fontSize: 12 }}>
+              {currentPlayer?.name ?? '...'}&apos;s turn
+            </span>
         }
-      </div>
+      </Frame>
 
-      {/* Play area + side pile */}
-      <div style={styles.tableRow}>
-        {/* Spacer to balance the right-side pile */}
-        <div style={styles.sidePlaceholder} />
+      <div style={tableRowStyle}>
+        <div style={sidePlaceholderStyle} />
 
-        {/* Play area — full hand history stacked */}
-        <div style={styles.playArea}>
+        <div style={playAreaStyle}>
           {state.currentHandPlays.length === 0 ? (
-            <div style={styles.emptyPlay}>
-              <div style={styles.emptyCircle}>
-                <span style={styles.emptyText}>Lead the hand</span>
+            <div style={emptyPlayStyle}>
+              <div style={emptyCircleStyle}>
+                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14, fontStyle: 'italic' }}>
+                  Lead the hand
+                </span>
               </div>
             </div>
           ) : (
             <>
-              <div style={styles.playLabel}>
-                <span style={styles.categoryName}>{CATEGORY_LABEL[state.currentTopPlay!.category]}</span>
-                <span style={styles.playedBy}>by {topPlayer?.name ?? '?'}</span>
-              </div>
+              <Frame
+                bgColor="$material"
+                boxShadow="$out"
+                px="$4"
+                py="$1"
+                style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}
+              >
+                <span style={{ color: '#000', fontSize: 13, fontWeight: 700 }}>
+                  {CATEGORY_LABEL[state.currentTopPlay!.category]}
+                </span>
+                <span style={{ color: '#444', fontSize: 11 }}>by {topPlayer?.name ?? '?'}</span>
+              </Frame>
               <PlayStack plays={state.currentHandPlays} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
             </>
           )}
         </div>
 
-
-        {/* Middle pile — off to the right, stacked flat, face down */}
-        <div style={styles.middlePileArea}>
+        <div style={middlePileAreaStyle}>
           {state.middlePileCount > 0 && (
-            <div style={styles.middlePileStack}>
+            <div style={middlePileStackStyle}>
               {Array.from({ length: Math.min(state.middlePileCount, 3) }, (_, i) => (
-                <div key={i} style={{ ...styles.middlePileCard, top: i * 2, left: i * 2, zIndex: i }}>
+                <div key={i} style={{ position: 'absolute', top: i * 2, left: i * 2, zIndex: i }}>
                   <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
                 </div>
               ))}
@@ -140,108 +152,62 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  area: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    padding: '0 24px',
-  },
-  turnBanner: {
-    padding: '8px 20px',
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    textAlign: 'center',
-  },
-  myTurnText: {
-    color: '#fde68a',
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  theirTurnText: {
-    color: '#d1d5db',
-    fontSize: 14,
-  },
-  tableRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-    justifyContent: 'space-between',
-  },
-  sidePlaceholder: {
-    width: 86,  // same width as middlePileStack + offset
-  },
-  playArea: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 140,
-    justifyContent: 'center',
-  },
-  playLabel: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  categoryName: {
-    color: '#fde68a',
-    fontSize: 18,
-    fontWeight: 700,
-  },
-  playedBy: {
-    color: '#9ca3af',
-    fontSize: 13,
-  },
-  cards: {
-    display: 'flex',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  emptyPlay: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyCircle: {
-    width: 160,
-    height: 100,
-    borderRadius: 12,
-    border: '2px dashed rgba(255,255,255,0.15)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
-  middlePileArea: {
-    width: 86,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-  },
-  middlePileStack: {
-    position: 'relative',
-    width: 80,
-    height: 112,
-  },
-  middlePileCard: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    transformOrigin: 'center bottom',
-  },
-  middlePileCount: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 11,
-    fontStyle: 'italic',
-  },
+const areaStyle: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '0 24px',
+}
+
+const tableRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  justifyContent: 'space-between',
+}
+
+const sidePlaceholderStyle: React.CSSProperties = {
+  width: 86,
+}
+
+const playAreaStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 8,
+  minHeight: 140,
+  justifyContent: 'center',
+}
+
+const emptyPlayStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+const emptyCircleStyle: React.CSSProperties = {
+  width: 160,
+  height: 100,
+  border: '2px dashed rgba(255,255,255,0.25)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+const middlePileAreaStyle: React.CSSProperties = {
+  width: 86,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 8,
+}
+
+const middlePileStackStyle: React.CSSProperties = {
+  position: 'relative',
+  width: 80,
+  height: 112,
 }
