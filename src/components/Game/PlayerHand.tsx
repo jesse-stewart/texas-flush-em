@@ -60,6 +60,7 @@ export function PlayerHand({
 
       <div style={cardRowStyle}>
         <DeckStack count={deckSize} discardingCards={discardingCards} />
+        <div style={pileDividerStyle} />
         <Hand
           overlap={24}
           cards={cards}
@@ -111,7 +112,6 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
           </motion.div>
         ))}
       </div>
-      <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{count} in deck</span>
     </div>
   )
 }
@@ -135,6 +135,14 @@ const cardRowStyle: React.CSSProperties = {
   overflow: 'visible',
   gap: 12,
   marginTop: 32,
+}
+
+const pileDividerStyle: React.CSSProperties = {
+  width: 1,
+  height: 100,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  alignSelf: 'flex-end',
+  marginBottom: 4,
 }
 
 const dealerBadgeStyle: React.CSSProperties = {

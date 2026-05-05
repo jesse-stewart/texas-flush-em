@@ -28,6 +28,8 @@ interface OpponentAreaProps {
 export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events }: OpponentAreaProps) {
   if (opponents.length === 0) return null
 
+  // Opponents shown at the top are always across the table from me, so flip
+  // them 180° regardless of how many there are.
   return (
     <div style={rowStyle}>
       {opponents.map(p => (
@@ -40,6 +42,7 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
           events={events}
           myPlayerId={myPlayerId}
           allPlayers={allPlayers}
+          orientation="across"
         />
       ))}
     </div>
@@ -63,8 +66,10 @@ export function OpponentSeat({
   events: GameEvent[]
   myPlayerId: string
   allPlayers: PlayerView[]
-  orientation?: 'horizontal' | 'vertical'
+  orientation?: 'horizontal' | 'across' | 'left' | 'right'
 }) {
+  const isVertical = orientation === 'left' || orientation === 'right'
+  const isAcross = orientation === 'across'
   const handCount = player.handSize
   const deckCount = player.deckSize
   const deckLayers = Math.min(deckCount, 4)
@@ -128,39 +133,83 @@ export function OpponentSeat({
         )}
       </Frame>
 
-      <div style={orientation === 'vertical' ? pilesVerticalStyle : pilesStyle}>
+      <div style={
+        orientation === 'left' ? pilesVerticalLeftStyle :
+        orientation === 'right' ? pilesVerticalRightStyle :
+        pilesStyle
+      }>
         <div style={pileGroupStyle}>
           {handCount === 0 ? (
             <span style={emptyLabelStyle}>empty</span>
-          ) : orientation === 'vertical' ? (
-            <VerticalCardStack count={handCount} />
+          ) : isVertical ? (
+            <VerticalCardStack count={handCount} direction={orientation as 'left' | 'right'} />
           ) : (
-            <Hand
-              cards={fakeCards}
-              ids={handOrder.map(id => `${player.id}-${id}`)}
-              selectedIndices={selectedIndices}
-              onToggle={() => {}}
-              disabled
-              faceDown
-              flip
-            />
+            // For 'across' the entire Hand is rotated 180° so each card visually
+            // flips upside-down (matches an opponent across the table), while the
+            // surrounding pile group / labels stay readable.
+            <div style={isAcross ? { transform: 'rotate(180deg)' } : undefined}>
+              <Hand
+                cards={fakeCards}
+                ids={handOrder.map(id => `${player.id}-${id}`)}
+                selectedIndices={selectedIndices}
+                onToggle={() => {}}
+                disabled
+                faceDown
+                flip
+              />
+            </div>
           )}
         </div>
 
-        <div style={orientation === 'vertical' ? pileDividerVerticalStyle : pileDividerStyle} />
+        <div style={isVertical ? pileDividerVerticalStyle : pileDividerStyle} />
 
         <div style={pileGroupStyle}>
-          <div style={{ position: 'relative', width: 80 + deckLayers * 3, height: 112 + deckLayers * 3 }}>
+          <div
+            style={{
+              position: 'relative',
+              width: (isVertical ? 112 : 80) + deckLayers * 3,
+              height: (isVertical ? 80 : 112) + deckLayers * 3,
+            }}
+          >
             {deckCount === 0 ? (
-              <div style={deckPlaceholderStyle}>
+              <div style={isVertical ? deckPlaceholderVerticalStyle : deckPlaceholderStyle}>
                 <span style={emptyLabelStyle}>empty</span>
               </div>
             ) : (
-              Array.from({ length: deckLayers }).map((_, i) => (
-                <div key={i} style={{ position: 'absolute', left: i * 3, top: (deckLayers - 1 - i) * 3, zIndex: i }}>
-                  <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-                </div>
-              ))
+              Array.from({ length: deckLayers }).map((_, i) =>
+                isVertical ? (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      top: i * 3,
+                      left: (deckLayers - 1 - i) * 3,
+                      width: 80,
+                      height: 112,
+                      transformOrigin: 'top left',
+                      transform: orientation === 'left'
+                        ? 'translateX(112px) rotate(90deg)'
+                        : 'translateY(80px) rotate(-90deg)',
+                      zIndex: i,
+                    }}
+                  >
+                    <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
+                  </div>
+                ) : (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      left: i * 3,
+                      top: (deckLayers - 1 - i) * 3,
+                      zIndex: i,
+                      transform: isAcross ? 'rotate(180deg)' : undefined,
+                    }}
+                  >
+                    <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
+                  </div>
+                )
+              )
             )}
           </div>
           <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{deckCount} in deck</span>
@@ -171,9 +220,10 @@ export function OpponentSeat({
 }
 
 // Vertical face-down hand for side-seated opponents — each card is rotated 90deg
-// and overlaps the next, stacking down the column. Rotation pivots at top-left
-// then translates +width on X to bring the visual back into positive coords.
-function VerticalCardStack({ count }: { count: number }) {
+// and overlaps the next, stacking down the column. Rotation pivots at top-left;
+// for 'left' we translate +H on X to bring the visual back into positive coords,
+// for 'right' we rotate the opposite way and translate +W on Y.
+function VerticalCardStack({ count, direction = 'left' }: { count: number; direction?: 'left' | 'right' }) {
   const STEP = 22
   const CARD_W = 80
   const CARD_H = 112
@@ -193,7 +243,9 @@ function VerticalCardStack({ count }: { count: number }) {
             width: CARD_W,
             height: CARD_H,
             transformOrigin: 'top left',
-            transform: `translateX(${CARD_H}px) rotate(90deg)`,
+            transform: direction === 'left'
+              ? `translateX(${CARD_H}px) rotate(90deg)`
+              : `translateY(${CARD_W}px) rotate(-90deg)`,
             zIndex: i,
           }}
         >
@@ -207,7 +259,7 @@ function VerticalCardStack({ count }: { count: number }) {
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'safe center',
-  gap: 48,
+  gap: 96,
   padding: '14px 24px 8px',
   flexShrink: 0,
 }
@@ -254,7 +306,14 @@ const pileDividerStyle: React.CSSProperties = {
   alignSelf: 'center',
 }
 
-const pilesVerticalStyle: React.CSSProperties = {
+const pilesVerticalLeftStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column-reverse',
+  alignItems: 'center',
+  gap: 12,
+}
+
+const pilesVerticalRightStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -281,4 +340,10 @@ const deckPlaceholderStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+}
+
+const deckPlaceholderVerticalStyle: React.CSSProperties = {
+  ...deckPlaceholderStyle,
+  width: 112,
+  height: 80,
 }

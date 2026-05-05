@@ -90,7 +90,7 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
         {hint}
       </span>
       <div style={{ display: 'flex', gap: 6 }}>
-        <Button onClick={onPlay} disabled={!canPlay} style={{ minWidth: 80, fontWeight: 700 }}>
+        <Button onClick={onPlay} disabled={!canPlay} primary style={{ minWidth: 80 }}>
           Play
         </Button>
         <Button onClick={onDiscard} disabled={!canDiscard} style={{ minWidth: 90 }}>

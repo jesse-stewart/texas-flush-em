@@ -272,6 +272,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   events={state.events}
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
+                  orientation="across"
                 />
               </div>
 
@@ -284,7 +285,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   events={state.events}
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
-                  orientation="vertical"
+                  orientation="left"
                 />
               </div>
 
@@ -301,7 +302,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   events={state.events}
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
-                  orientation="vertical"
+                  orientation="right"
                 />
               </div>
 
