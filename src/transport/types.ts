@@ -12,7 +12,9 @@ export interface PlayerPresence {
 
 // Actions sent from client → server
 export type GameAction =
-  | { type: 'JOIN'; playerName: string }
+  // `client` lets external bots identify themselves as API players (UI badge + log).
+  // Browser clients omit it; server defaults to 'browser'.
+  | { type: 'JOIN'; playerName: string; client?: 'browser' | 'api' }
   | { type: 'ADD_BOT'; difficulty?: BotDifficulty }
   | { type: 'REMOVE_BOT'; playerId: string }
   | { type: 'SET_BOT_DIFFICULTY'; playerId: string; difficulty: BotDifficulty }

@@ -20,5 +20,5 @@
       "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["src", "shared", "party", ".storybook", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "shared", "party", "bot-sdk", ".storybook", "vite.config.ts", "vitest.config.ts"]
 }

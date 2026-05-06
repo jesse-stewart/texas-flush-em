@@ -3,6 +3,7 @@ import { Frame, TitleBar } from '@react95/core'
 import { Button, TextInput } from 'react95'
 import { RulesModal } from '../RulesModal'
 import { AboutModal } from '../AboutModal'
+import { ApiSpecModal } from '../ApiSpecModal'
 import { MenuBar } from '../MenuBar'
 import { palette } from '../../palette'
 
@@ -26,6 +27,7 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
   const [error, setError] = useState('')
   const [rulesOpen, setRulesOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [apiOpen, setApiOpen] = useState(false)
 
   const hasRoom = roomInput.trim().length > 0
   const displayError = error || externalError || ''
@@ -60,6 +62,7 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
               name: '&Help',
               items: [
                 { label: '&Rules', onClick: () => setRulesOpen(true) },
+                { label: 'Bot &API…', onClick: () => setApiOpen(true) },
                 { divider: true, label: '' },
                 { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
               ],
@@ -145,6 +148,7 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
 
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
     </div>
   )
 }

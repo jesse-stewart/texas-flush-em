@@ -22,7 +22,7 @@ export type GameEvent =
   | { ts: number; type: 'round_won'; playerId: string; emptied: boolean }
   | { ts: number; type: 'eliminated'; playerId: string }
   | { ts: number; type: 'game_won'; playerId: string }
-  | { ts: number; type: 'joined'; playerId: string; playerName: string; isBot: boolean }
+  | { ts: number; type: 'joined'; playerId: string; playerName: string; isBot: boolean; isApi: boolean }
   | { ts: number; type: 'left'; playerId: string }
 
 // ============================================================
@@ -77,6 +77,7 @@ export interface PlayerState {
   connected: boolean
   eliminated: boolean // reached 52+ cumulative points or left the game
   isBot: boolean     // server-controlled CPU player; no real WebSocket connection
+  isApi: boolean     // externally-controlled bot connected via the public API; behaves like a human at the engine level
   botDifficulty?: BotDifficulty  // bots only; undefined for humans
 }
 

@@ -20,6 +20,7 @@ export function mockPlayer(overrides: Partial<PlayerView> = {}): PlayerView {
     isConnected: true,
     eliminated: false,
     isBot: false,
+    isApi: false,
     ...overrides,
   }
 }

@@ -15,12 +15,31 @@ const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no 
 
 // Connection close codes for client-surfaced auth failures (4xxx range = application-defined).
 const CLOSE_BAD_PASSWORD = 4001
+const CLOSE_RATE_LIMITED = 4002
+
+// Per-room sliding-window rate limit on new connections per source IP.
+// Sized to be a no-op for any realistic legitimate use (LAN parties, mobile carriers behind CGNAT)
+// while still cutting off scripted abuse. Cross-room limits would need a singleton coordinator
+// party, which is more complexity than warranted for v1.
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const RATE_LIMIT_MAX_CONNECTS = 30
+
+function getClientIp(headers: { get(name: string): string | null }): string {
+  // Cloudflare sets cf-connecting-ip with the true client IP. Fall back to x-forwarded-for's
+  // first hop. Dev/localhost may have neither — return '' so dev connections aren't limited.
+  return headers.get('cf-connecting-ip')
+    ?? (headers.get('x-forwarded-for') ?? '').split(',')[0].trim()
+    ?? ''
+}
 
 export default class GameParty implements Party.Server {
   private state: GameState = initialState()
   private password: string | null = null  // null = no password required
   private botTimer: ReturnType<typeof setTimeout> | null = null
   private botSeq = 0  // bumped on every state mutation; cancels stale bot work
+  // Sliding window of recent connection timestamps per source IP (this room only).
+  // Pruned on each new connection; entries auto-expire when the room hibernates.
+  private connectsByIp = new Map<string, number[]>()
 
   constructor(readonly room: Party.Room) {}
 
@@ -50,6 +69,13 @@ export default class GameParty implements Party.Server {
   }
 
   onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+    // Per-IP connection rate limit. Empty IP (dev/localhost without proxy headers) is exempt.
+    const ip = getClientIp(ctx.request.headers)
+    if (ip && this.isRateLimited(ip)) {
+      conn.close(CLOSE_RATE_LIMITED, 'rate-limited')
+      return
+    }
+
     // First connection on an empty, never-used room may set a password.
     // Otherwise the incoming password must match the stored one.
     const incoming = new URL(ctx.request.url).searchParams.get('p') ?? ''
@@ -91,6 +117,7 @@ export default class GameParty implements Party.Server {
           type: 'ADD_PLAYER',
           playerId: sender.id,
           playerName: action.playerName,
+          isApi: action.client === 'api',
         })
         break
 
@@ -253,5 +280,20 @@ export default class GameParty implements Party.Server {
 
   private sendTo(conn: Party.Connection, event: GameEvent) {
     conn.send(JSON.stringify(event))
+  }
+
+  // Sliding-window check + record. Returns true if this IP has exceeded the cap
+  // in the last RATE_LIMIT_WINDOW_MS, in which case the caller should reject.
+  private isRateLimited(ip: string): boolean {
+    const now = Date.now()
+    const cutoff = now - RATE_LIMIT_WINDOW_MS
+    const recent = (this.connectsByIp.get(ip) ?? []).filter(ts => ts > cutoff)
+    if (recent.length >= RATE_LIMIT_MAX_CONNECTS) {
+      this.connectsByIp.set(ip, recent)
+      return true
+    }
+    recent.push(now)
+    this.connectsByIp.set(ip, recent)
+    return false
   }
 }

@@ -131,6 +131,11 @@ export function OpponentSeat({
             {DIFFICULTY_BADGE[player.botDifficulty].label}
           </span>
         )}
+        {player.isApi && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', backgroundColor: palette.win, color: palette.white }}>
+            API
+          </span>
+        )}
       </Frame>
 
       <div style={

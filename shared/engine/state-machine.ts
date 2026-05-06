@@ -84,7 +84,7 @@ function rotateDealer(
 // ============================================================
 
 export type GameCommand =
-  | { type: 'ADD_PLAYER'; playerId: string; playerName: string }
+  | { type: 'ADD_PLAYER'; playerId: string; playerName: string; isApi?: boolean }
   | { type: 'ADD_BOT'; playerId: string; playerName: string; difficulty?: BotDifficulty }
   | { type: 'REMOVE_BOT'; playerId: string }
   | { type: 'SET_BOT_DIFFICULTY'; playerId: string; difficulty: BotDifficulty }
@@ -112,6 +112,7 @@ export interface PlayerView {
   isConnected: boolean
   eliminated: boolean
   isBot: boolean
+  isApi: boolean
   botDifficulty?: BotDifficulty
 }
 
@@ -151,6 +152,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
       isConnected: p.connected,
       eliminated: p.eliminated,
       isBot: p.isBot,
+      isApi: p.isApi,
       botDifficulty: p.botDifficulty,
     })),
     myHand: me?.hand ?? [],
@@ -409,7 +411,7 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
 
 function applyAddPlayer(
   state: GameState,
-  cmd: { playerId: string; playerName: string },
+  cmd: { playerId: string; playerName: string; isApi?: boolean },
   isBot: boolean,
   difficulty?: BotDifficulty,
 ): GameState {
@@ -424,6 +426,7 @@ function applyAddPlayer(
     })
   }
 
+  const isApi = !isBot && (cmd.isApi ?? false)
   const newPlayer: PlayerState = {
     id: cmd.playerId,
     name: cmd.playerName,
@@ -433,6 +436,7 @@ function applyAddPlayer(
     connected: true,
     eliminated: false,
     isBot,
+    isApi,
     botDifficulty: isBot ? (difficulty ?? DEFAULT_BOT_DIFFICULTY) : undefined,
   }
 
@@ -442,7 +446,7 @@ function applyAddPlayer(
       players: [...state.players, newPlayer],
       scores: { ...state.scores, [cmd.playerId]: 0 },
     },
-    { type: 'joined', playerId: cmd.playerId, playerName: cmd.playerName, isBot },
+    { type: 'joined', playerId: cmd.playerId, playerName: cmd.playerName, isBot, isApi },
   )
 }
 

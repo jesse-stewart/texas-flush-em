@@ -3,6 +3,7 @@ import { Frame, TitleBar, contract } from '@react95/core'
 import { palette } from '../palette'
 import { RulesModal } from './RulesModal'
 import { AboutModal } from './AboutModal'
+import { ApiSpecModal } from './ApiSpecModal'
 import { CardBackPicker } from './CardBackPicker/CardBackPicker'
 import { MenuBar } from './MenuBar'
 import { LayoutGroup } from 'framer-motion'
@@ -35,6 +36,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   const [selected, setSelected] = useState<number[]>([])
   const [rulesOpen, setRulesOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [apiOpen, setApiOpen] = useState(false)
   const [cardBackOpen, setCardBackOpen] = useState(false)
   const [cardOrder, setCardOrder] = useState<HandSlot[]>([])
   const [discardingCards, setDiscardingCards] = useState<HandSlot[]>([])
@@ -218,6 +220,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
             name: '&Help',
             items: [
               { label: '&Rules', onClick: () => setRulesOpen(true) },
+              { label: 'Bot &API…', onClick: () => setApiOpen(true) },
               { divider: true, label: '' },
               { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
             ],
@@ -387,6 +390,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       )}
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
     </Frame>
   )

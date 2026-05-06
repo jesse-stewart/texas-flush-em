@@ -1,0 +1,24 @@
+{
+  "name": "flushem-bot-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-repo TypeScript SDK for writing Texas Flush'em bots that join games as API players.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "example": "tsx example.ts"
+  },
+  "license": "MIT",
+  "author": "Jesse Stewart <jesse@jessestewart.com>",
+  "dependencies": {
+    "partysocket": "^1.0.2"
+  }
+}

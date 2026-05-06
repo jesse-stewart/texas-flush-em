@@ -12,6 +12,7 @@ import { getCardBack } from '../../cardBacks'
 import { palette } from '../../palette'
 import { RulesModal } from '../RulesModal'
 import { AboutModal } from '../AboutModal'
+import { ApiSpecModal } from '../ApiSpecModal'
 import { MenuBar } from '../MenuBar'
 
 const SETTINGS_KEY = 'flushem_settings'
@@ -207,6 +208,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const [pickerOpen, setPickerOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [apiOpen, setApiOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'room' | 'settings'>('room')
   const cardBackId = useCardBackId()
   const cardBack = getCardBack(cardBackId)
@@ -298,6 +300,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
               name: '&Help',
               items: [
                 { label: '&Rules', onClick: () => setRulesOpen(true) },
+                { label: 'Bot &API…', onClick: () => setApiOpen(true) },
                 { divider: true, label: '' },
                 { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
               ],
@@ -370,6 +373,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                   <span style={{ fontWeight: 700 }}>{p.name}</span>
                   {p.id === myPlayerId && <span style={{ color: palette.vdkGray }}>(you)</span>}
                   {p.isBot && <span style={{ background: palette.navy, color: palette.white, padding: '0 4px', fontWeight: 700 }}>CPU</span>}
+                  {p.isApi && <span style={{ background: palette.win, color: palette.white, padding: '0 4px', fontWeight: 700 }}>API</span>}
                   {p.isBot && (
                     <>
                       <Select<BotDifficulty>
@@ -569,6 +573,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
       {pickerOpen && <CardBackPicker onClose={() => setPickerOpen(false)} />}
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
     </div>
   )
 }
