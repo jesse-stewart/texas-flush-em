@@ -4,7 +4,7 @@ import { evaluateHand } from './hand-eval'
 import type { EvaluatedHand } from './hand-eval'
 import { validatePlay, validateDiscard, scoreRound } from './rules'
 import type { GameState, GameOptions, PlayerState, HandPlay, BotDifficulty, GameEvent } from './game-state'
-import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, DEFAULT_BOT_DIFFICULTY } from './game-state'
+import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, MIN_CHIP_VALUE_PER_CARD, MAX_CHIP_VALUE_PER_CARD, DEFAULT_BOT_DIFFICULTY } from './game-state'
 
 // Distributive Omit so the discriminated union survives ts-stripping.
 type EventInput = GameEvent extends infer E ? (E extends GameEvent ? Omit<E, 'ts'> : never) : never
@@ -307,14 +307,15 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
   const scores: Record<string, number> = { ...state.scores }
 
   if (scoringMode === 'chips') {
-    // Losers pay chips equal to their card count; winner takes the pot.
+    // Losers pay chips equal to (cards remaining × per-card value); winner takes the pot.
+    const perCard = state.options.chipValuePerCard
     let pot = 0
     for (const [id, amt] of Object.entries(lossPerPlayer)) {
       if (id === winnerId) continue
       const player = players.find(p => p.id === id)
       // Already-eliminated players don't lose chips; cap loss at the player's current balance
       // so chips never go negative.
-      const lost = player && !player.eliminated ? Math.min(amt, scores[id] ?? 0) : 0
+      const lost = player && !player.eliminated ? Math.min(amt * perCard, scores[id] ?? 0) : 0
       delta[id] = -lost
       scores[id] = (scores[id] ?? 0) - lost
       pot += lost
@@ -481,6 +482,7 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
   const options: GameOptions = {
     ...merged,
     cardsPerPlayer: Math.max(MIN_CARDS_PER_PLAYER, merged.cardsPerPlayer),
+    chipValuePerCard: Math.min(MAX_CHIP_VALUE_PER_CARD, Math.max(MIN_CHIP_VALUE_PER_CARD, Math.floor(merged.chipValuePerCard))),
   }
   const piles = dealForMode(options, state.players.length)
 

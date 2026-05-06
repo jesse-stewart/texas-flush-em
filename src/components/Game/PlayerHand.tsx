@@ -4,6 +4,7 @@ import { Button } from 'react95'
 import type { Card as CardType } from '@shared/engine/card'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
+import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
 
 interface DiscardingSlot { id: number; card: CardType }
@@ -20,10 +21,11 @@ interface PlayerHandProps {
   deckSize: number
   discardingCards: DiscardingSlot[]
   isDealer?: boolean
+  chipCount?: number | null
 }
 
 export function PlayerHand({
-  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount,
 }: PlayerHandProps) {
   return (
     <Frame
@@ -59,6 +61,11 @@ export function PlayerHand({
       </div>
 
       <div style={cardRowStyle}>
+        {chipCount != null && (
+          <div style={{ alignSelf: 'flex-end', paddingBottom: 4 }}>
+            <ChipStack count={chipCount} />
+          </div>
+        )}
         <DeckStack count={deckSize} discardingCards={discardingCards} />
         <div style={pileDividerStyle} />
         <Hand
@@ -79,10 +86,10 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
   const layers = Math.min(count, 6)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, alignSelf: 'flex-end', paddingBottom: 4 }}>
-      <div style={{ position: 'relative', width: 80 + layers * 3, height: 112 + layers * 3 }}>
+      <div style={{ position: 'relative', width: 71 + layers * 3, height: 96 + layers * 3 }}>
         {count === 0 ? (
           <div style={{
-            width: 80, height: 112,
+            width: 71, height: 96,
             border: `2px dashed ${palette.midGray}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>

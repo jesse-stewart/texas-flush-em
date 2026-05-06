@@ -47,6 +47,8 @@ export interface GameOptions {
   threshold: number
   // Points-only: when a player reaches the threshold, eliminate them or end the whole game.
   pointsThresholdAction: PointsThresholdAction
+  // Chips-only: chips each remaining card is worth at round end. Default 1.
+  chipValuePerCard: number
   dealMode: DealMode
   // Personal/Mixed: cards each player starts with. Classic ignores this (uses all 52 / playerCount).
   cardsPerPlayer: number
@@ -58,11 +60,14 @@ export interface GameOptions {
 export const MIN_CARDS_PER_PLAYER = 10
 export const PERSONAL_MAX_CARDS = 52
 export const MIXED_DEFAULT_CARDS = 26
+export const MIN_CHIP_VALUE_PER_CARD = 1
+export const MAX_CHIP_VALUE_PER_CARD = 100
 
 export const DEFAULT_OPTIONS: GameOptions = {
   scoringMode: 'points',
   threshold: 26,
   pointsThresholdAction: 'eliminate',
+  chipValuePerCard: 6,
   dealMode: 'classic',
   cardsPerPlayer: PERSONAL_MAX_CARDS,
   mixedDeckCount: 2,

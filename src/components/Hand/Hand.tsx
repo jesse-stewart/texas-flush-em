@@ -22,7 +22,7 @@ import { Card as CardComponent } from '../Card/Card'
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
 const CARD_STEP            = 22         // px between adjacent card left edges
-const CARD_OVERLAP         = 80 - CARD_STEP   // default (opponent hands)
+const CARD_OVERLAP         = 71 - CARD_STEP   // default (opponent hands)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

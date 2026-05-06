@@ -99,7 +99,9 @@ Each non-winning player adds their card count to a running cumulative score. Low
 
 ### Chips Mode (gambling variant)
 
-Each player starts with an agreed pile of chips (typical: 13). After each round, each non-winning player pays one chip per card remaining in their hand (capped at 10), and the round winner takes the pot. Game ends when only one player has chips left.
+Each player starts with an agreed pile of chips (default: 78). After each round, each non-winning player pays the table's chip-per-card value for every card remaining in their hand (capped at 10 cards). The round winner takes the pot. Game ends when only one player has chips left.
+
+The **chip-per-card value** is set before play (default 6, up to 100). Higher values mean rounds swing more chips and games end faster. A loser can never go below zero — their loss is capped at their current chip balance.
 
 ## Next Round
 

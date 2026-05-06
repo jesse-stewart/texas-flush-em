@@ -87,11 +87,32 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
               <li><Mono>{'{ "type": "ADD_BOT", "difficulty": "easy"|"medium"|"hard" }'}</Mono> — add a CPU bot. Difficulty defaults to medium.</li>
               <li><Mono>{'{ "type": "REMOVE_BOT", "playerId": "..." }'}</Mono> — remove a CPU bot by player ID.</li>
               <li><Mono>{'{ "type": "SET_BOT_DIFFICULTY", "playerId": "...", "difficulty": "..." }'}</Mono> — change a CPU bot&apos;s difficulty.</li>
-              <li><Mono>{'{ "type": "START_GAME", "options": { ... } }'}</Mono> — start the game with the given options. Requires ≥2 players.</li>
+              <li><Mono>{'{ "type": "START_GAME", "options": { ... } }'}</Mono> — start the game with the given options (see <b>Game options</b> below). Requires ≥2 players.</li>
             </ul>
             <p style={{ margin: '6px 0 0', color: palette.dkGray }}>
               Each turn requires <b>DISCARD then PLAY or FOLD</b>, in that order. Invalid actions are silently ignored by the server — your state will not advance.
             </p>
+          </Section>
+
+          <Section title="Game options">
+            <p style={{ margin: '0 0 4px' }}>
+              Sent in <Mono>START_GAME</Mono> and frozen for the rest of the game. All fields are optional; missing fields fall back to the engine defaults shown below. The server clamps out-of-range values.
+            </p>
+            <Code>{`{
+  "scoringMode": "points" | "chips",        // default "points"
+  "threshold": number,                       // points target, OR starting chips. default 26
+  "pointsThresholdAction": "eliminate" | "end_game", // points-only. default "eliminate"
+  "chipValuePerCard": number,                // chips-only. 1–100. default 6
+  "dealMode": "classic" | "personal" | "mixed",      // default "classic"
+  "cardsPerPlayer": number,                  // personal/mixed only; classic ignores
+  "mixedDeckCount": number                   // mixed only, 1–4. default 2
+}`}</Code>
+            <ul style={listStyle}>
+              <li><b>scoringMode</b> — <Mono>points</Mono> accumulates penalty points (lower = better); <Mono>chips</Mono> transfers chips between players.</li>
+              <li><b>threshold</b> — in points mode, hitting it triggers <Mono>pointsThresholdAction</Mono>; in chips mode, the starting chip pile per player.</li>
+              <li><b>chipValuePerCard</b> — chips mode only. Each remaining card a loser holds at round end is worth this many chips. Default 1, up to 100. Loss is capped at the loser&apos;s current balance so chips never go negative.</li>
+              <li><b>dealMode</b> — <Mono>classic</Mono> deals one shared 52-card deck round-robin; <Mono>personal</Mono> gives each player their own private deck; <Mono>mixed</Mono> shuffles <Mono>mixedDeckCount</Mono> decks together.</li>
+            </ul>
           </Section>
 
           <Section title="Events you receive">

@@ -6,6 +6,7 @@ import type { Card as CardType } from '@shared/engine/card'
 import type { BotDifficulty, GameEvent } from '@shared/engine/game-state'
 import { Card } from '../Card/Card'
 import { Hand } from '../Hand/Hand'
+import { ChipStack } from '../Chips/ChipStack'
 import { EventBubble } from './EventBubble'
 import { palette } from '../../palette'
 
@@ -23,9 +24,10 @@ interface OpponentAreaProps {
   dealerId: string | null
   presence: Map<string, PlayerPresence>
   events: GameEvent[]
+  chipCounts?: Record<string, number>
 }
 
-export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events }: OpponentAreaProps) {
+export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events, chipCounts }: OpponentAreaProps) {
   if (opponents.length === 0) return null
 
   // Opponents shown at the top are always across the table from me, so flip
@@ -43,6 +45,7 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
           myPlayerId={myPlayerId}
           allPlayers={allPlayers}
           orientation="across"
+          chipCount={chipCounts?.[p.id] ?? null}
         />
       ))}
     </div>
@@ -57,7 +60,7 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
 
 export function OpponentSeat({
   player, isActive, isDealer, presence, events, myPlayerId, allPlayers,
-  orientation = 'horizontal',
+  orientation = 'horizontal', chipCount,
 }: {
   player: PlayerView
   isActive: boolean
@@ -67,6 +70,7 @@ export function OpponentSeat({
   myPlayerId: string
   allPlayers: PlayerView[]
   orientation?: 'horizontal' | 'across' | 'left' | 'right'
+  chipCount?: number | null
 }) {
   const isVertical = orientation === 'left' || orientation === 'right'
   const isAcross = orientation === 'across'
@@ -172,8 +176,8 @@ export function OpponentSeat({
           <div
             style={{
               position: 'relative',
-              width: (isVertical ? 112 : 80) + deckLayers * 3,
-              height: (isVertical ? 80 : 112) + deckLayers * 3,
+              width: (isVertical ? 96 : 71) + deckLayers * 3,
+              height: (isVertical ? 71 : 96) + deckLayers * 3,
             }}
           >
             {deckCount === 0 ? (
@@ -189,12 +193,12 @@ export function OpponentSeat({
                       position: 'absolute',
                       top: i * 3,
                       left: (deckLayers - 1 - i) * 3,
-                      width: 80,
-                      height: 112,
+                      width: 71,
+                      height: 96,
                       transformOrigin: 'top left',
                       transform: orientation === 'left'
-                        ? 'translateX(112px) rotate(90deg)'
-                        : 'translateY(80px) rotate(-90deg)',
+                        ? 'translateX(96px) rotate(90deg)'
+                        : 'translateY(71px) rotate(-90deg)',
                       zIndex: i,
                     }}
                   >
@@ -219,6 +223,12 @@ export function OpponentSeat({
           </div>
           <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{deckCount} in deck</span>
         </div>
+
+        {chipCount != null && (
+          <div style={pileGroupStyle}>
+            <ChipStack count={chipCount} />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -230,8 +240,8 @@ export function OpponentSeat({
 // for 'right' we rotate the opposite way and translate +W on Y.
 function VerticalCardStack({ count, direction = 'left' }: { count: number; direction?: 'left' | 'right' }) {
   const STEP = 22
-  const CARD_W = 80
-  const CARD_H = 112
+  const CARD_W = 71
+  const CARD_H = 96
   return (
     <div style={{
       position: 'relative',
@@ -339,8 +349,8 @@ const emptyLabelStyle: React.CSSProperties = {
 }
 
 const deckPlaceholderStyle: React.CSSProperties = {
-  width: 80,
-  height: 112,
+  width: 71,
+  height: 96,
   border: '2px dashed rgba(255,255,255,0.25)',
   display: 'flex',
   alignItems: 'center',
@@ -349,6 +359,6 @@ const deckPlaceholderStyle: React.CSSProperties = {
 
 const deckPlaceholderVerticalStyle: React.CSSProperties = {
   ...deckPlaceholderStyle,
-  width: 112,
-  height: 80,
+  width: 96,
+  height: 71,
 }

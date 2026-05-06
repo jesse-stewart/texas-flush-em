@@ -13,8 +13,8 @@ interface CardProps {
   backIdOverride?: string
 }
 
-const CARD_W = 80
-const CARD_H = 112
+const CARD_W = 71
+const CARD_H = 96
 const COLS = 13
 const ROWS = 6
 

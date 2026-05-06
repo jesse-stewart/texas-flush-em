@@ -178,6 +178,13 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
     )
   }
 
+  const isChipsMode = state.options.scoringMode === 'chips'
+  const chipCountOf = (id: string): number | null =>
+    isChipsMode ? (state.scores[id] ?? 0) : null
+  const chipCounts: Record<string, number> | undefined = isChipsMode
+    ? Object.fromEntries(state.players.map(p => [p.id, state.scores[p.id] ?? 0]))
+    : undefined
+
   return (
     <Frame
       bgColor="$material"
@@ -276,6 +283,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
                   orientation="across"
+                  chipCount={chipCountOf(orderedOpponents[1].id)}
                 />
               </div>
 
@@ -289,6 +297,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
                   orientation="left"
+                  chipCount={chipCountOf(orderedOpponents[0].id)}
                 />
               </div>
 
@@ -306,6 +315,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   myPlayerId={myPlayerId}
                   allPlayers={state.players}
                   orientation="right"
+                  chipCount={chipCountOf(orderedOpponents[2].id)}
                 />
               </div>
 
@@ -331,6 +341,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   deckSize={state.myDeckSize}
                   discardingCards={discardingCards}
                   isDealer={state.dealerId === myPlayerId}
+                  chipCount={chipCountOf(myPlayerId)}
                 />
               </div>
             </div>
@@ -344,6 +355,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 dealerId={state.dealerId}
                 presence={presence}
                 events={state.events}
+                chipCounts={chipCounts}
               />
 
               <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
@@ -369,6 +381,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 deckSize={state.myDeckSize}
                 discardingCards={discardingCards}
                 isDealer={state.dealerId === myPlayerId}
+                chipCount={chipCountOf(myPlayerId)}
               />
             </>
           )}

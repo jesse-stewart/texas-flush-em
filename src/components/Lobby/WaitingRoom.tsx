@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Frame, TitleBar, Fieldset } from '@react95/core'
-import { Button, NumberInput, Select, Tabs, Tab, TabBody } from 'react95'
+import { Button, TextInput, Select, Tabs, Tab, TabBody } from 'react95'
 import QRCode from 'react-qr-code'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
-import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
+import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, MIN_CHIP_VALUE_PER_CARD, MAX_CHIP_VALUE_PER_CARD, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
 import { CardBackPicker } from '../CardBackPicker/CardBackPicker'
 import { CardBackVisual } from '../Card/Card'
 import { useCardBackId } from '../../contexts/CardBackContext'
@@ -21,6 +21,7 @@ interface PersistedSettings {
   scoringMode: GameOptions['scoringMode']
   pointsTarget: number
   chipsStarting: number
+  chipValuePerCard: number
   pointsThresholdAction: GameOptions['pointsThresholdAction']
   dealMode: DealMode
   personalCards: number
@@ -28,6 +29,8 @@ interface PersistedSettings {
   mixedCards: number
 }
 
+// Typed-in number entry. Uses an internal string draft so the user can clear the field
+// and type freely; the parent only sees clamped numeric values.
 function NumberStepper({
   value, min, max, onChange, width = 90,
 }: {
@@ -37,13 +40,51 @@ function NumberStepper({
   onChange: (v: number) => void
   width?: number
 }) {
+  const [draft, setDraft] = useState(String(value))
+  const lastCommittedRef = useRef(value)
+  useEffect(() => {
+    if (value !== lastCommittedRef.current) {
+      lastCommittedRef.current = value
+      setDraft(String(value))
+    }
+  }, [value])
+
+  function clamp(n: number): number {
+    let v = n
+    if (v < min) v = min
+    if (max !== undefined && v > max) v = max
+    return v
+  }
+
+  function commit(text: string) {
+    const parsed = parseInt(text, 10)
+    const next = Number.isFinite(parsed) ? clamp(parsed) : clamp(value)
+    lastCommittedRef.current = next
+    setDraft(String(next))
+    if (next !== value) onChange(next)
+  }
+
   return (
-    <NumberInput
-      value={value}
-      min={min}
-      max={max}
-      onChange={onChange}
-      width={width}
+    <TextInput
+      type="text"
+      inputMode="numeric"
+      value={draft}
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = e.target.value
+        if (/^-?\d*$/.test(v)) {
+          setDraft(v)
+          const parsed = parseInt(v, 10)
+          if (Number.isFinite(parsed)) {
+            const clamped = clamp(parsed)
+            if (clamped !== value) onChange(clamped)
+          }
+        }
+      }}
+      onBlur={() => commit(draft)}
+      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      }}
+      style={{ width, textAlign: 'right' }}
     />
   )
 }
@@ -94,12 +135,13 @@ const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
 }
 
 const DEFAULT_POINTS_TARGET = 26
-const DEFAULT_CHIPS_STARTING = 13
+const DEFAULT_CHIPS_STARTING = 78
 
 const DEFAULT_SETTINGS: PersistedSettings = {
   scoringMode: DEFAULT_OPTIONS.scoringMode,
   pointsTarget: DEFAULT_POINTS_TARGET,
   chipsStarting: DEFAULT_CHIPS_STARTING,
+  chipValuePerCard: DEFAULT_OPTIONS.chipValuePerCard,
   pointsThresholdAction: DEFAULT_OPTIONS.pointsThresholdAction,
   dealMode: DEFAULT_OPTIONS.dealMode,
   personalCards: PERSONAL_MAX_CARDS,
@@ -146,7 +188,8 @@ const PRESETS: Preset[] = [
     hint: 'Chips, take everyone to win.',
     settings: {
       scoringMode: 'chips',
-      chipsStarting: 13,
+      chipsStarting: 78,
+      chipValuePerCard: 6,
       dealMode: 'classic',
     },
   },
@@ -217,6 +260,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const [scoringMode, setScoringMode] = useState<GameOptions['scoringMode']>(initial.scoringMode)
   const [pointsTarget, setPointsTarget] = useState(initial.pointsTarget)
   const [chipsStarting, setChipsStarting] = useState(initial.chipsStarting)
+  const [chipValuePerCard, setChipValuePerCard] = useState(initial.chipValuePerCard)
   const [pointsThresholdAction, setPointsThresholdAction] = useState<GameOptions['pointsThresholdAction']>(initial.pointsThresholdAction)
   const [dealMode, setDealMode] = useState<DealMode>(initial.dealMode)
   const [personalCards, setPersonalCards] = useState(initial.personalCards)
@@ -225,13 +269,13 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
 
   useEffect(() => {
     saveSettings({
-      scoringMode, pointsTarget, chipsStarting, pointsThresholdAction,
+      scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction,
       dealMode, personalCards, mixedDeckCount, mixedCards,
     })
-  }, [scoringMode, pointsTarget, chipsStarting, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
+  }, [scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
 
   const activePreset = detectActivePreset({
-    scoringMode, pointsTarget, chipsStarting, pointsThresholdAction,
+    scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction,
     dealMode, personalCards, mixedDeckCount, mixedCards,
   })
 
@@ -240,6 +284,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
     if (s.scoringMode !== undefined) setScoringMode(s.scoringMode)
     if (s.pointsTarget !== undefined) setPointsTarget(s.pointsTarget)
     if (s.chipsStarting !== undefined) setChipsStarting(s.chipsStarting)
+    if (s.chipValuePerCard !== undefined) setChipValuePerCard(s.chipValuePerCard)
     if (s.pointsThresholdAction !== undefined) setPointsThresholdAction(s.pointsThresholdAction)
     if (s.dealMode !== undefined) setDealMode(s.dealMode)
     if (s.personalCards !== undefined) setPersonalCards(s.personalCards)
@@ -260,6 +305,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
     scoringMode,
     threshold,
     pointsThresholdAction,
+    chipValuePerCard,
     dealMode,
     cardsPerPlayer: dealMode === 'personal' ? personalCards : effectiveMixedCards,
     mixedDeckCount,
@@ -446,6 +492,17 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                         options={[{ value: 'eliminate', label: 'Eliminate' }, { value: 'end_game', label: 'End game' }]}
                         value={pointsThresholdAction}
                         onChange={setPointsThresholdAction}
+                      />
+                    </SettingRow>
+                  )}
+
+                  {scoringMode === 'chips' && (
+                    <SettingRow label="Chips per card">
+                      <NumberStepper
+                        value={chipValuePerCard}
+                        min={MIN_CHIP_VALUE_PER_CARD}
+                        max={MAX_CHIP_VALUE_PER_CARD}
+                        onChange={setChipValuePerCard}
                       />
                     </SettingRow>
                   )}
