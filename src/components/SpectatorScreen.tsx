@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Frame, TitleBar, contract } from '@react95/core'
 import { Button } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
@@ -5,6 +6,11 @@ import type { PlayerPresence } from '../transport/presence'
 import { OpponentArea } from './Game/OpponentArea'
 import { TableCenter } from './Game/TableCenter'
 import { EventLog } from './Game/EventLog'
+import { MenuBar } from './MenuBar'
+import { RulesModal } from './RulesModal'
+import { AboutModal } from './AboutModal'
+import { ApiSpecModal } from './ApiSpecModal'
+import { CardBackPicker } from './CardBackPicker/CardBackPicker'
 import { palette } from '../palette'
 
 interface SpectatorScreenProps {
@@ -15,6 +21,11 @@ interface SpectatorScreenProps {
 }
 
 export function SpectatorScreen({ state, presence, onLeave, eliminated }: SpectatorScreenProps) {
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [apiOpen, setApiOpen] = useState(false)
+  const [cardBackOpen, setCardBackOpen] = useState(false)
+
   return (
     <Frame
       bgColor="$material"
@@ -24,9 +35,36 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
     >
       <TitleBar title="Texas Flush'em - Spectating" active>
         <TitleBar.OptionsBox>
+          <TitleBar.Help onClick={() => setRulesOpen(true)} />
           <TitleBar.Close onClick={onLeave} />
         </TitleBar.OptionsBox>
       </TitleBar>
+
+      <MenuBar
+        menus={[
+          {
+            name: '&Game',
+            items: [
+              { label: '&Leave game', onClick: onLeave },
+            ],
+          },
+          {
+            name: '&View',
+            items: [
+              { label: '&Card backs...', onClick: () => setCardBackOpen(true) },
+            ],
+          },
+          {
+            name: '&Help',
+            items: [
+              { label: '&Rules', onClick: () => setRulesOpen(true) },
+              { label: 'Bot &API…', onClick: () => setApiOpen(true) },
+              { divider: true, label: '' },
+              { label: '&About Texas Flush\'em', onClick: () => setAboutOpen(true) },
+            ],
+          },
+        ]}
+      />
 
       <Frame
         bgColor="$material"
@@ -83,6 +121,11 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
           </div>
         </div>
       </Frame>
+
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
+      {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
+      {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
     </Frame>
   )
 }
