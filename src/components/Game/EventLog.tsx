@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Frame } from '@react95/core'
 import type { GameEvent } from '@shared/engine/game-state'
 import type { PlayerView } from '@shared/engine/state-machine'
@@ -11,6 +12,13 @@ interface EventLogProps {
 }
 
 export function EventLog({ events, players, myPlayerId }: EventLogProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [events?.length])
+
   if (!events || events.length === 0) return null
 
   const start = events[0].ts
@@ -32,7 +40,7 @@ export function EventLog({ events, players, myPlayerId }: EventLogProps) {
       }}>
         Game log
       </div>
-      <div style={{
+      <div ref={scrollRef} style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 2,

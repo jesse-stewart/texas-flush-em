@@ -18,8 +18,11 @@ export interface BotRunConfig {
   // Effort controls token spend / thinking depth. Sonnet/Opus 4.6+ supports low|medium|high|max (max is Opus-only).
   // Opus 4.7 also accepts 'xhigh' between high and max — pass it via the env var if your SDK version supports it.
   effort: 'low' | 'medium' | 'high' | 'max'
-  // Adaptive thinking lets Claude decide when to think. 'summarized' display surfaces reasoning to the console.
-  thinkingDisplay: 'omitted' | 'summarized'
+  // Thinking mode:
+  //   'off'        — no thinking; cheapest. Reasoning still surfaces via the tool call's `reasoning` field.
+  //   'quiet'      — adaptive thinking, full text omitted from response (still billed for thinking output tokens).
+  //   'summarized' — adaptive thinking, summarized text surfaced to the console for debugging.
+  thinking: 'off' | 'quiet' | 'summarized'
   // Max output tokens per Claude call. Generous default — actions are short, but thinking can be longer.
   maxTokens: number
 
@@ -49,11 +52,13 @@ export const config: BotRunConfig = {
   playerId: process.env.BOT_ID,
 
   // --- Claude API ---
-  // Default to Opus 4.7 — the most capable model. Override here or via env if you want Sonnet/Haiku.
-  model: process.env.CLAUDE_MODEL ?? 'claude-opus-4-7',
-  effort: (process.env.CLAUDE_EFFORT as BotRunConfig['effort']) ?? 'high',
-  thinkingDisplay: (process.env.CLAUDE_THINKING_DISPLAY as 'omitted' | 'summarized') ?? 'summarized',
-  maxTokens: Number(process.env.CLAUDE_MAX_TOKENS ?? 16000),
+  // Defaults are tuned for cost: Sonnet 4.6 with medium effort and no thinking. The bot still
+  // plays well — game state arrives structured, decisions are short. Crank these up if you want
+  // stronger play (set CLAUDE_MODEL=claude-opus-4-7, CLAUDE_EFFORT=high, CLAUDE_THINKING=summarized).
+  model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6',
+  effort: (process.env.CLAUDE_EFFORT as BotRunConfig['effort']) ?? 'medium',
+  thinking: (process.env.CLAUDE_THINKING as BotRunConfig['thinking']) ?? 'off',
+  maxTokens: Number(process.env.CLAUDE_MAX_TOKENS ?? 8000),
 
   // --- Lobby auto-fill ---
   // Comma-separated list of difficulties. One CPU bot is added per entry.

@@ -230,6 +230,14 @@ async function takeTurn(state: ClientGameState) {
   const phase = state.turnPhase
   console.log(`\n[${config.playerName}] my turn — phase=${phase}, hand=${state.myHand.length} cards`)
 
+  // Short-circuit: in the discard phase with an empty deck, the engine auto-skips discard
+  // anyway — no real choice to make. Skip the API call entirely.
+  if (phase === 'discard' && state.myDeckSize === 0) {
+    console.log(`  deck empty — auto-skipping discard (no API call)`)
+    bot.discard([])
+    return
+  }
+
   const { systemBlocks, userText } = buildTurnPrompt(state, bot.playerId)
 
   // Constrain the available tools to the current phase. The model can ONLY call
@@ -244,12 +252,19 @@ async function takeTurn(state: ClientGameState) {
   // call a tool; if it ever returns text instead, our fallback folds/skips the turn.
   const tool_choice: Anthropic.Messages.ToolChoice = { type: 'auto' }
 
+  // Build the thinking parameter: 'off' disables thinking entirely (cheapest);
+  // 'quiet' / 'summarized' enable adaptive thinking with the corresponding display mode.
+  const thinking: Anthropic.Messages.ThinkingConfigParam =
+    config.thinking === 'off'
+      ? { type: 'disabled' }
+      : { type: 'adaptive', display: config.thinking === 'summarized' ? 'summarized' : 'omitted' }
+
   let response: Anthropic.Message
   try {
     response = await anthropic.messages.create({
       model: config.model,
       max_tokens: config.maxTokens,
-      thinking: { type: 'adaptive', display: config.thinkingDisplay },
+      thinking,
       output_config: { effort: config.effort },
       system: systemBlocks,
       tools,
