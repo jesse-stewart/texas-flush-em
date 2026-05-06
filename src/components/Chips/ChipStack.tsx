@@ -2,6 +2,7 @@ import { palette } from '../../palette'
 
 interface ChipStackProps {
   count: number
+  playerName?: string
 }
 
 const DENOMINATIONS = [100, 25, 10, 5, 1] as const
@@ -98,11 +99,14 @@ function chipSpriteStyle(denom: Denom, variant: 0 | 1): React.CSSProperties {
   }
 }
 
-export function ChipStack({ count }: ChipStackProps) {
+export function ChipStack({ count, playerName }: ChipStackProps) {
   if (count <= 0) {
     return (
-      <span style={{ fontSize: 11, color: palette.ltGray, fontStyle: 'italic' }}>
-        empty
+      <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, verticalAlign: 'bottom' }}>
+        <span style={{ fontSize: 11, color: palette.ltGray, fontStyle: 'italic' }}>
+          empty
+        </span>
+        {playerName != null && <ChipStackLabel playerName={playerName} count={0} />}
       </span>
     )
   }
@@ -126,26 +130,53 @@ export function ChipStack({ count }: ChipStackProps) {
   return (
     <span
       style={{
-        position: 'relative',
-        display: 'inline-block',
-        width: maxRight,
-        height: containerH,
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
         verticalAlign: 'bottom',
       }}
     >
-      {presentDenoms.map((d, i) => {
-        const { left, bottom, z } = SLOTS[i]
-        return (
-          <SingleStack
-            key={d}
-            denom={d}
-            count={breakdown[d]}
-            left={left}
-            bottom={bottom}
-            zIndex={z}
-          />
-        )
-      })}
+      <span
+        style={{
+          position: 'relative',
+          display: 'inline-block',
+          width: maxRight,
+          height: containerH,
+        }}
+      >
+        {presentDenoms.map((d, i) => {
+          const { left, bottom, z } = SLOTS[i]
+          return (
+            <SingleStack
+              key={d}
+              denom={d}
+              count={breakdown[d]}
+              left={left}
+              bottom={bottom}
+              zIndex={z}
+            />
+          )
+        })}
+      </span>
+      {playerName != null && <ChipStackLabel playerName={playerName} count={count} />}
+    </span>
+  )
+}
+
+function ChipStackLabel({ playerName, count }: { playerName: string; count: number }) {
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color: palette.white,
+        textShadow: '1px 1px 0 rgba(0,0,0,0.6)',
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
+      }}
+    >
+      {playerName}: ${count}
     </span>
   )
 }

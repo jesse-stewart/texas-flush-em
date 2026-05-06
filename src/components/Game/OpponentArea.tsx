@@ -226,7 +226,7 @@ export function OpponentSeat({
 
         {chipCount != null && (
           <div style={pileGroupStyle}>
-            <ChipStack count={chipCount} />
+            <ChipStack count={chipCount} playerName={player.name} />
           </div>
         )}
       </div>

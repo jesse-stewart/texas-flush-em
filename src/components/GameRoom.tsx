@@ -203,7 +203,7 @@ function RoundEndModal({
             {winner?.name ?? 'Someone'} wins the round!
           </div>
           <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? palette.win : palette.lose }}>
-            {isWinner ? 'No chips lost' : `-${myDelta} chips`}
+            {isWinner ? 'No chips lost' : `-$${Math.abs(myDelta)}`}
           </div>
           <Button onClick={onNext} style={{ marginTop: 8, minWidth: 120 }}>
             See scores
@@ -253,7 +253,7 @@ function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState;
                         {isGameWinner && <span style={{ marginLeft: 6, color: palette.win, fontSize: 11 }}>winner</span>}
                       </td>
                       <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>
-                        {state.scores[p.id] ?? 0}
+                        {isChips ? `$${state.scores[p.id] ?? 0}` : (state.scores[p.id] ?? 0)}
                       </td>
                     </tr>
                   )
@@ -331,8 +331,8 @@ function RoundEndScreen({
                   let deltaText = '-'
                   let deltaColor: string = palette.dkGray
                   if (isChips) {
-                    if (delta > 0) { deltaText = `+${delta}`; deltaColor = palette.win }
-                    else if (delta < 0) { deltaText = `${delta}`; deltaColor = palette.lose }
+                    if (delta > 0) { deltaText = `+$${delta}`; deltaColor = palette.win }
+                    else if (delta < 0) { deltaText = `-$${Math.abs(delta)}`; deltaColor = palette.lose }
                   } else {
                     if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = palette.lose }
                   }
@@ -349,11 +349,11 @@ function RoundEndScreen({
                             : <Hourglass size={16} style={{ marginLeft: 6, verticalAlign: 'middle' }} />
                         )}
                       </td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', color: palette.dkGray }}>{before}</td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', color: palette.dkGray }}>{isChips ? `$${before}` : before}</td>
                       <td style={{ paddingTop: 4, textAlign: 'right', color: deltaColor, fontWeight: 700 }}>
                         {deltaText}
                       </td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>{total}</td>
+                      <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>{isChips ? `$${total}` : total}</td>
                     </tr>
                   )
                 })}

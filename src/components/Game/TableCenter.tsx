@@ -6,7 +6,9 @@ import { HandCategory } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
 import { palette } from '../../palette'
 
+const CARD_WIDTH = 71
 const CARD_HEIGHT = 96
+const CARD_GAP = 6
 const STACK_OFFSET = CARD_HEIGHT * 0.1
 
 interface PlayStackProps {
@@ -18,9 +20,11 @@ interface PlayStackProps {
 function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
   if (plays.length === 0) return null
   const height = (plays.length - 1) * STACK_OFFSET + CARD_HEIGHT
+  const maxCards = plays.reduce((m, p) => Math.max(m, p.hand.cards.length), 1)
+  const width = maxCards * CARD_WIDTH + (maxCards - 1) * CARD_GAP
   const lastIndex = plays.length - 1
   return (
-    <div style={{ position: 'relative', height, minWidth: 71 }}>
+    <div style={{ position: 'relative', height, width, flexShrink: 0 }}>
       <AnimatePresence>
         {plays.map((play, i) => {
           const useFlip = i === lastIndex && play.playerId === myPlayerId && myLastPlaySlotIds
@@ -34,7 +38,7 @@ function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
                 transform: 'translateX(-50%)',
                 zIndex: i + 1,
                 display: 'flex',
-                gap: 6,
+                gap: CARD_GAP,
               }}
             >
               {play.hand.cards.map((card, j) => (

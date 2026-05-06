@@ -22,10 +22,11 @@ interface PlayerHandProps {
   discardingCards: DiscardingSlot[]
   isDealer?: boolean
   chipCount?: number | null
+  playerName?: string
 }
 
 export function PlayerHand({
-  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount, playerName,
 }: PlayerHandProps) {
   return (
     <Frame
@@ -63,7 +64,7 @@ export function PlayerHand({
       <div style={cardRowStyle}>
         {chipCount != null && (
           <div style={{ alignSelf: 'flex-end', paddingBottom: 4 }}>
-            <ChipStack count={chipCount} />
+            <ChipStack count={chipCount} playerName={playerName} />
           </div>
         )}
         <DeckStack count={deckSize} discardingCards={discardingCards} />

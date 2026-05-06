@@ -184,6 +184,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   const chipCounts: Record<string, number> | undefined = isChipsMode
     ? Object.fromEntries(state.players.map(p => [p.id, state.scores[p.id] ?? 0]))
     : undefined
+  const myPlayerName = state.players.find(p => p.id === myPlayerId)?.name
 
   return (
     <Frame
@@ -342,6 +343,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   discardingCards={discardingCards}
                   isDealer={state.dealerId === myPlayerId}
                   chipCount={chipCountOf(myPlayerId)}
+                  playerName={myPlayerName}
                 />
               </div>
             </div>
@@ -382,6 +384,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 discardingCards={discardingCards}
                 isDealer={state.dealerId === myPlayerId}
                 chipCount={chipCountOf(myPlayerId)}
+                playerName={myPlayerName}
               />
             </>
           )}

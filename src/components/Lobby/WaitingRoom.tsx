@@ -32,13 +32,14 @@ interface PersistedSettings {
 // Typed-in number entry. Uses an internal string draft so the user can clear the field
 // and type freely; the parent only sees clamped numeric values.
 function NumberStepper({
-  value, min, max, onChange, width = 90,
+  value, min, max, onChange, width = 90, prefix,
 }: {
   value: number
   min: number
   max?: number
   onChange: (v: number) => void
   width?: number
+  prefix?: string
 }) {
   const [draft, setDraft] = useState(String(value))
   const lastCommittedRef = useRef(value)
@@ -64,7 +65,7 @@ function NumberStepper({
     if (next !== value) onChange(next)
   }
 
-  return (
+  const input = (
     <TextInput
       type="text"
       inputMode="numeric"
@@ -84,9 +85,19 @@ function NumberStepper({
       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
-      style={{ width, textAlign: 'right' }}
+      style={{ width: prefix ? Math.max(40, width - 14) : width, textAlign: 'right' }}
     />
   )
+
+  if (prefix) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span>{prefix}</span>
+        {input}
+      </span>
+    )
+  }
+  return input
 }
 
 function Segmented<T extends string | number>({
@@ -479,6 +490,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                     <NumberStepper
                       value={threshold}
                       min={1}
+                      prefix={scoringMode === 'chips' ? '$' : undefined}
                       onChange={v => {
                         if (scoringMode === 'points') setPointsTarget(v)
                         else setChipsStarting(v)
@@ -502,6 +514,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                         value={chipValuePerCard}
                         min={MIN_CHIP_VALUE_PER_CARD}
                         max={MAX_CHIP_VALUE_PER_CARD}
+                        prefix="$"
                         onChange={setChipValuePerCard}
                       />
                     </SettingRow>

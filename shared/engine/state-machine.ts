@@ -309,6 +309,7 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
   if (scoringMode === 'chips') {
     // Losers pay chips equal to (cards remaining × per-card value); winner takes the pot.
     const perCard = state.options.chipValuePerCard
+    console.log('[endRound chips]', { perCard, optionsType: typeof state.options.chipValuePerCard, lossPerPlayer, scores: { ...state.scores }, fullOptions: state.options })
     let pot = 0
     for (const [id, amt] of Object.entries(lossPerPlayer)) {
       if (id === winnerId) continue

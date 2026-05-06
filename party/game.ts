@@ -148,7 +148,9 @@ export default class GameParty implements Party.Server {
         break
 
       case 'START_GAME':
+        console.log('[party START_GAME] received options:', action.options)
         this.state = applyCommand(this.state, { type: 'START_GAME', options: action.options })
+        console.log('[party START_GAME] applied options:', this.state.options)
         break
 
       case 'READY_FOR_NEXT_ROUND':
