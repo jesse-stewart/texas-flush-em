@@ -119,6 +119,8 @@ let lastHandledTurnKey = ''
 // Track whether we've already topped up the lobby with CPU bots, so we don't keep
 // re-adding them on every state broadcast (or after a human removes one).
 let lobbyTopUpDone = false
+// One-shot flag: schedule the auto-start timer at most once per session.
+let autoStartScheduled = false
 
 // A "turn key" identifies one (player, phase, top play) so we don't re-decide
 // on every state broadcast — only when the turn actually changes.
@@ -159,6 +161,27 @@ bot.onState(async (state: ClientGameState) => {
       console.warn(`[${config.playerName}] could not add ${skipped} bot(s) — only ${slotsAvailable} slot(s) available`)
     }
     lobbyTopUpDone = true
+  }
+
+  // Auto-start: if configured, schedule a one-shot timer. After the delay, if still in
+  // lobby with ≥2 players, send START_GAME. The delay gives humans time to join and any
+  // ADD_BOT actions we just sent time to register on the server.
+  if (state.phase === 'lobby' && config.autoStart && !autoStartScheduled) {
+    autoStartScheduled = true
+    console.log(`[${config.playerName}] auto-start armed — will start in ${config.autoStartDelayMs}ms if ≥2 players`)
+    setTimeout(() => {
+      const current = bot.state
+      if (!current || current.phase !== 'lobby') {
+        console.log(`[${config.playerName}] auto-start: lobby no longer active, skipping`)
+        return
+      }
+      if (current.players.length < 2) {
+        console.log(`[${config.playerName}] auto-start: only ${current.players.length} player(s), need ≥2 — skipping`)
+        return
+      }
+      console.log(`[${config.playerName}] auto-start: starting game with ${current.players.length} players`)
+      bot.startGame()  // uses engine defaults; pass a Partial<GameOptions> here to customize
+    }, config.autoStartDelayMs)
   }
 
   // Between rounds — auto-ready so the game keeps moving.

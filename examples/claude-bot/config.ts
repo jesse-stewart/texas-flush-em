@@ -26,6 +26,12 @@ export interface BotRunConfig {
   // CPU bots to add when entering a fresh lobby. One entry per bot, each its own difficulty.
   // E.g. ['easy', 'hard'] adds two CPUs: one easy, one hard.
   extraBots: BotDifficulty[]
+
+  // Auto-start the game from the lobby once at least 2 players are seated.
+  // Wait `autoStartDelayMs` after entering the lobby first, to give humans time
+  // to join and any extra bots to register on the server.
+  autoStart: boolean
+  autoStartDelayMs: number
 }
 
 function require(name: string): string {
@@ -54,6 +60,16 @@ export const config: BotRunConfig = {
   // E.g. EXTRA_BOTS=easy,hard,medium → 3 CPUs: easy + hard + medium.
   // Capped to 3 (the room's 4-player limit minus this bot).
   extraBots: parseExtraBots(process.env.EXTRA_BOTS),
+
+  // --- Auto-start ---
+  autoStart: parseBool(process.env.AUTO_START, false),
+  autoStartDelayMs: Number(process.env.AUTO_START_DELAY_MS ?? 3000),
+}
+
+function parseBool(raw: string | undefined, fallback: boolean): boolean {
+  if (raw == null) return fallback
+  const v = raw.trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
 }
 
 function parseExtraBots(raw: string | undefined): BotDifficulty[] {
