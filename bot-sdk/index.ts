@@ -24,7 +24,10 @@ export type { Card } from '../shared/engine/card'
 export type { Rank, Suit } from '../shared/engine/card'
 export type { ClientGameState, PlayerView } from '../shared/engine/state-machine'
 export type { HandCategory, EvaluatedHand } from '../shared/engine/hand-eval'
-export type { GameOptions } from '../shared/engine/game-state'
+export type { GameOptions, BotDifficulty } from '../shared/engine/game-state'
+
+import type { BotDifficulty } from '../shared/engine/game-state'
+import type { GameOptions } from '../shared/engine/game-state'
 
 export interface BotConfig {
   // PartyKit host — 'localhost:1999' for dev, '<project>.<user>.partykit.dev' for prod.
@@ -56,6 +59,13 @@ export interface Bot {
   fold(): void
   leave(): void
   readyForNextRound(): void
+
+  // Lobby-only actions (no-ops outside the 'lobby' phase). Useful for bots that want to
+  // populate or manage their own room before play starts.
+  addBot(difficulty?: BotDifficulty): void
+  removeBot(playerId: string): void
+  setBotDifficulty(playerId: string, difficulty: BotDifficulty): void
+  startGame(options?: Partial<GameOptions>): void
 
   // Subscriptions — each returns an unsubscribe function.
   onState(handler: (state: ClientGameState) => void): () => void
@@ -132,6 +142,10 @@ export function createBot(config: BotConfig): Bot {
     fold() { send({ type: 'FOLD' }) },
     leave() { send({ type: 'LEAVE' }) },
     readyForNextRound() { send({ type: 'READY_FOR_NEXT_ROUND' }) },
+    addBot(difficulty) { send({ type: 'ADD_BOT', difficulty }) },
+    removeBot(playerId) { send({ type: 'REMOVE_BOT', playerId }) },
+    setBotDifficulty(playerId, difficulty) { send({ type: 'SET_BOT_DIFFICULTY', playerId, difficulty }) },
+    startGame(options) { send({ type: 'START_GAME', options }) },
 
     onState(handler) { stateHandlers.add(handler); return () => stateHandlers.delete(handler) },
     onError(handler) { errorHandlers.add(handler); return () => errorHandlers.delete(handler) },

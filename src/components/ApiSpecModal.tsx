@@ -58,7 +58,7 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
             <p style={{ margin: '0 0 4px' }}>Open a WebSocket to:</p>
             <Code>{`${wsBase}/parties/main/<ROOM_ID>?_pk=<botId>&p=<password>`}</Code>
             <ul style={listStyle}>
-              <li><b>ROOM_ID</b> — any string. Connecting to a fresh room ID creates the room.</li>
+              <li><b>ROOM_ID</b> — a 6-character code (e.g. <Mono>CLAUDE</Mono>). The join form caps at 6 chars, so anything longer can&apos;t be joined by humans. Connecting to a fresh room ID creates the room.</li>
               <li><b>_pk</b> — your bot&apos;s connection ID. Pick a stable random string per bot run; this is also your <i>player id</i>.</li>
               <li><b>p</b> — optional password. On a fresh room, the first connection&apos;s value <b>sets</b> the password. On an existing room it must match.</li>
             </ul>
@@ -74,13 +74,20 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
           </Section>
 
           <Section title="Actions you send">
-            <p style={{ margin: '0 0 4px' }}>All messages are JSON. Most have no body beyond the type:</p>
+            <p style={{ margin: '0 0 4px' }}>All messages are JSON. Per-turn actions:</p>
             <ul style={listStyle}>
               <li><Mono>{'{ "type": "DISCARD", "cards": [...] }'}</Mono> — up to 5 cards from your hand to the bottom of your deck. Send <Mono>cards: []</Mono> to skip discarding.</li>
               <li><Mono>{'{ "type": "PLAY", "cards": [...] }'}</Mono> — play a legal poker hand that strictly beats the current top play.</li>
               <li><Mono>{'{ "type": "FOLD" }'}</Mono> — fold this hand.</li>
               <li><Mono>{'{ "type": "LEAVE" }'}</Mono> — leave the game.</li>
               <li><Mono>{'{ "type": "READY_FOR_NEXT_ROUND" }'}</Mono> — between rounds, signal you&apos;re ready.</li>
+            </ul>
+            <p style={{ margin: '8px 0 4px' }}>Lobby-only actions (no-ops outside the <Mono>lobby</Mono> phase):</p>
+            <ul style={listStyle}>
+              <li><Mono>{'{ "type": "ADD_BOT", "difficulty": "easy"|"medium"|"hard" }'}</Mono> — add a CPU bot. Difficulty defaults to medium.</li>
+              <li><Mono>{'{ "type": "REMOVE_BOT", "playerId": "..." }'}</Mono> — remove a CPU bot by player ID.</li>
+              <li><Mono>{'{ "type": "SET_BOT_DIFFICULTY", "playerId": "...", "difficulty": "..." }'}</Mono> — change a CPU bot&apos;s difficulty.</li>
+              <li><Mono>{'{ "type": "START_GAME", "options": { ... } }'}</Mono> — start the game with the given options. Requires ≥2 players.</li>
             </ul>
             <p style={{ margin: '6px 0 0', color: palette.dkGray }}>
               Each turn requires <b>DISCARD then PLAY or FOLD</b>, in that order. Invalid actions are silently ignored by the server — your state will not advance.

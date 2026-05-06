@@ -1,0 +1,15 @@
+{
+  "name": "flushem-claude-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Example Texas Flush'em bot powered by Claude AI via tool use.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
+    "dotenv": "^16.4.5",
+    "partysocket": "^1.0.2"
+  }
+}

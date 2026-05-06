@@ -13,7 +13,8 @@
     "party:dev": "partykit dev",
     "party:deploy": "partykit deploy",
     "sdk:build": "cd bot-sdk && tsup",
-    "sdk:example": "tsx bot-sdk/example.ts"
+    "sdk:example": "tsx bot-sdk/example.ts",
+    "claude-bot": "cd examples/claude-bot && npm start"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
