@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Frame, TitleBar, Fieldset } from '@react95/core'
-import { Button, TextInput, Select, Tabs, Tab, TabBody } from 'react95'
+import { Button, Select, Tabs, Tab, TabBody } from 'react95'
 import QRCode from 'react-qr-code'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-state'
-import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, MIN_CHIP_VALUE_PER_CARD, MAX_CHIP_VALUE_PER_CARD, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
+import { MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIN_CHIP_VALUE_PER_CARD, MAX_CHIP_VALUE_PER_CARD, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
 import { CardBackPicker } from '../CardBackPicker/CardBackPicker'
 import { CardBackVisual } from '../Card/Card'
 import { Icon } from '../Icon/Icon'
@@ -15,119 +15,11 @@ import { RulesModal } from '../RulesModal'
 import { AboutModal } from '../AboutModal'
 import { ApiSpecModal } from '../ApiSpecModal'
 import { MenuBar } from '../MenuBar'
-
-const SETTINGS_KEY = 'flushem_settings'
-
-interface PersistedSettings {
-  scoringMode: GameOptions['scoringMode']
-  pointsTarget: number
-  chipsStarting: number
-  chipValuePerCard: number
-  anteAmount: number
-  pointsThresholdAction: GameOptions['pointsThresholdAction']
-  dealMode: DealMode
-  personalCards: number
-  mixedDeckCount: number
-  mixedCards: number
-}
-
-// Typed-in number entry. Uses an internal string draft so the user can clear the field
-// and type freely; the parent only sees clamped numeric values.
-function NumberStepper({
-  value, min, max, onChange, width = 90, prefix,
-}: {
-  value: number
-  min: number
-  max?: number
-  onChange: (v: number) => void
-  width?: number
-  prefix?: string
-}) {
-  const [draft, setDraft] = useState(String(value))
-  const lastCommittedRef = useRef(value)
-  useEffect(() => {
-    if (value !== lastCommittedRef.current) {
-      lastCommittedRef.current = value
-      setDraft(String(value))
-    }
-  }, [value])
-
-  function clamp(n: number): number {
-    let v = n
-    if (v < min) v = min
-    if (max !== undefined && v > max) v = max
-    return v
-  }
-
-  function commit(text: string) {
-    const parsed = parseInt(text, 10)
-    const next = Number.isFinite(parsed) ? clamp(parsed) : clamp(value)
-    lastCommittedRef.current = next
-    setDraft(String(next))
-    if (next !== value) onChange(next)
-  }
-
-  const input = (
-    <TextInput
-      type="text"
-      inputMode="numeric"
-      value={draft}
-      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-        const v = e.target.value
-        if (/^-?\d*$/.test(v)) {
-          setDraft(v)
-          const parsed = parseInt(v, 10)
-          if (Number.isFinite(parsed)) {
-            const clamped = clamp(parsed)
-            if (clamped !== value) onChange(clamped)
-          }
-        }
-      }}
-      onBlur={() => commit(draft)}
-      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-      }}
-      style={{ width: prefix ? Math.max(40, width - 14) : width, textAlign: 'right' }}
-    />
-  )
-
-  if (prefix) {
-    return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <span>{prefix}</span>
-        {input}
-      </span>
-    )
-  }
-  return input
-}
-
-function Segmented<T extends string | number>({
-  options, value, onChange,
-}: {
-  options: { value: T; label: string }[]
-  value: T
-  onChange: (v: T) => void
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 2 }}>
-      {options.map(opt => {
-        const active = opt.value === value
-        return (
-          <Button
-            key={String(opt.value)}
-            onClick={() => onChange(opt.value)}
-            active={active}
-            size="sm"
-            style={{ minWidth: 50 }}
-          >
-            {opt.label}
-          </Button>
-        )
-      })}
-    </div>
-  )
-}
+import { NumberStepper } from '../Inputs/NumberStepper'
+import { Segmented } from '../Inputs/Segmented'
+import { loadSettings, saveSettings } from '../../lib/settings'
+import { PRESETS, detectActivePreset, type Preset } from '../../lib/presets'
+import { estimateMinutes, formatDuration } from '../../lib/gameEstimation'
 
 interface WaitingRoomProps {
   state: ClientGameState
@@ -145,129 +37,6 @@ const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
   easy: 'Easy',
   medium: 'Medium',
   hard: 'Hard',
-}
-
-const DEFAULT_POINTS_TARGET = 26
-const DEFAULT_CHIPS_STARTING = 60
-
-const DEFAULT_SETTINGS: PersistedSettings = {
-  scoringMode: DEFAULT_OPTIONS.scoringMode,
-  pointsTarget: DEFAULT_POINTS_TARGET,
-  chipsStarting: DEFAULT_CHIPS_STARTING,
-  chipValuePerCard: DEFAULT_OPTIONS.chipValuePerCard,
-  anteAmount: DEFAULT_OPTIONS.anteAmount,
-  pointsThresholdAction: DEFAULT_OPTIONS.pointsThresholdAction,
-  dealMode: DEFAULT_OPTIONS.dealMode,
-  personalCards: PERSONAL_MAX_CARDS,
-  mixedDeckCount: DEFAULT_OPTIONS.mixedDeckCount,
-  mixedCards: MIXED_DEFAULT_CARDS,
-}
-
-type PresetKey = 'default' | 'quick' | 'classic' | 'long'
-
-interface Preset {
-  key: PresetKey
-  label: string
-  hint: string
-  // Subset of PersistedSettings — only the fields the preset overrides.
-  settings: Partial<PersistedSettings>
-}
-
-const PRESETS: Preset[] = [
-  {
-    key: 'default',
-    label: 'Default',
-    hint: 'Chips with $5 ante, classic deck.',
-    settings: {
-      scoringMode: 'chips',
-      chipsStarting: 60,
-      chipValuePerCard: 5,
-      anteAmount: 5,
-      dealMode: 'classic',
-    },
-  },
-  {
-    key: 'quick',
-    label: 'Quick',
-    hint: 'First to 13 points ends the game.',
-    settings: {
-      scoringMode: 'points',
-      pointsTarget: 13,
-      pointsThresholdAction: 'end_game',
-      dealMode: 'classic',
-    },
-  },
-  {
-    key: 'classic',
-    label: 'Classic',
-    hint: 'Points to 26, eliminate at threshold.',
-    settings: {
-      scoringMode: 'points',
-      pointsTarget: 26,
-      pointsThresholdAction: 'eliminate',
-      dealMode: 'classic',
-    },
-  },
-  {
-    key: 'long',
-    label: 'Long game',
-    hint: 'Chips, take everyone to win.',
-    settings: {
-      scoringMode: 'chips',
-      chipsStarting: 78,
-      chipValuePerCard: 6,
-      dealMode: 'classic',
-    },
-  },
-]
-
-// Returns the preset whose every override matches current settings, or null.
-function detectActivePreset(s: PersistedSettings): PresetKey | null {
-  for (const p of PRESETS) {
-    const match = (Object.keys(p.settings) as (keyof PersistedSettings)[])
-      .every(k => s[k] === p.settings[k])
-    if (match) return p.key
-  }
-  return null
-}
-
-function loadSettings(): PersistedSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
-    if (!raw) return DEFAULT_SETTINGS
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) as Partial<PersistedSettings> }
-  } catch {
-    return DEFAULT_SETTINGS
-  }
-}
-
-function saveSettings(s: PersistedSettings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
-  } catch { /* quota / private mode */ }
-}
-
-const HUMAN_MIN_PER_ROUND = 2.5
-const BOT_MIN_PER_ROUND = 0.05
-const AVG_CARDS_PER_LOSS = 3
-
-function estimateMinutes(opts: GameOptions, humansCount: number, botsCount: number): number | null {
-  const playerCount = humansCount + botsCount
-  if (playerCount < 2) return null
-  const minPerRound = humansCount * HUMAN_MIN_PER_ROUND + botsCount * BOT_MIN_PER_ROUND
-  const lossPerRound = AVG_CARDS_PER_LOSS * (playerCount - 1) / playerCount
-  const roundsToFirstHit = opts.threshold / lossPerRound
-  const isFirstHitOnly =
-    opts.scoringMode === 'points' && opts.pointsThresholdAction === 'end_game'
-  const tail = isFirstHitOnly ? 1 : 1 + 0.5 * (playerCount - 2)
-  return Math.round(roundsToFirstHit * minPerRound * tail)
-}
-
-function formatDuration(min: number): string {
-  if (min < 60) return `~${min} min`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m === 0 ? `~${h} hr` : `~${h} hr ${m} min`
 }
 
 export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLeave, onAddBot, onRemoveBot, onSetBotDifficulty }: WaitingRoomProps) {
@@ -294,11 +63,16 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const [mixedDeckCount, setMixedDeckCount] = useState(initial.mixedDeckCount)
   const [mixedCards, setMixedCards] = useState(initial.mixedCards)
 
+  // Debounce localStorage writes — typed-in number fields fire onChange per keystroke,
+  // and synchronous JSON.stringify + setItem on every one stalled the input feel.
   useEffect(() => {
-    saveSettings({
-      scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction,
-      dealMode, personalCards, mixedDeckCount, mixedCards,
-    })
+    const t = setTimeout(() => {
+      saveSettings({
+        scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction,
+        dealMode, personalCards, mixedDeckCount, mixedCards,
+      })
+    }, 500)
+    return () => clearTimeout(t)
   }, [scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
 
   const activePreset = detectActivePreset({

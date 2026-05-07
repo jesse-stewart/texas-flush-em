@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 // ← Swap this import to change transport (Socket.io, etc.) — nothing else changes
 import { createTransport } from '../transport/partykit'
 import type { ConnectionError, GameTransport } from '../transport/GameTransport'
@@ -43,7 +43,7 @@ export function useGame({ roomId, playerId, password }: UseGameOptions): UseGame
       if (isPresenceEvent(event)) {
         setPresence(prev => {
           const next = new Map(prev)
-          next.set(event.playerId, { handOrder: event.handOrder, selectedPositions: event.selectedPositions })
+          next.set(event.playerId, { handOrder: event.handOrder, selectedPositions: event.selectedPositions, bettingTarget: event.bettingTarget })
           return next
         })
       }
@@ -63,13 +63,15 @@ export function useGame({ roomId, playerId, password }: UseGameOptions): UseGame
     }
   }, [roomId, playerId, password])
 
-  const send = (message: ClientMessage) => {
+  // Memoized so consumers can include them in effect dep arrays without causing
+  // re-runs on every render. Both only read the ref, so an empty dep list is honest.
+  const send = useCallback((message: ClientMessage) => {
     transportRef.current?.send(message)
-  }
+  }, [])
 
-  const requestDebugState = () => {
+  const requestDebugState = useCallback(() => {
     transportRef.current?.send({ type: 'DEBUG_FULL_STATE' })
-  }
+  }, [])
 
   return { state, isConnected, connectionError, send, presence, debugState, requestDebugState }
 }

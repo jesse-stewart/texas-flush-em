@@ -15,8 +15,18 @@ const preview: Preview = {
       default: 'win95-desktop',
       values: [
         { name: 'win95-desktop', value: '#008080' },
-        { name: 'felt', value: '#0f4c2a' },
+        { name: 'felt', value: '#006600' },
       ],
+    },
+    options: {
+      storySort: {
+        order: [
+          'Components',
+          ['Card', 'CardStack', 'Chip', 'ChipStack', 'Icon'],
+          'Game',
+          'Lobby',
+        ],
+      },
     },
   },
 }

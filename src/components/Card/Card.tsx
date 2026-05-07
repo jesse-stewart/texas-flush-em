@@ -13,8 +13,8 @@ interface CardProps {
   backIdOverride?: string
 }
 
-const CARD_W = 71
-const CARD_H = 96
+export const CARD_W = 71
+export const CARD_H = 96
 const COLS = 13
 const ROWS = 6
 
@@ -30,7 +30,7 @@ const RANK_COL: Record<string, number> = {
   '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
 }
 
-const SPRITE_URL = '/cards.png'
+const SPRITE_URL = '/cards_71_96.png'
 
 function spritePosition(row: number, col: number, w: number, h: number): React.CSSProperties {
   return {
@@ -88,8 +88,8 @@ export function Card({ card, selected = false, faceDown = false, onClick, backId
     overflow: 'hidden',
     transform: selected ? 'translateY(-10px)' : 'none',
     boxShadow: selected
-      ? '0 0 0 3px #2563eb, 0 6px 16px rgba(0,0,0,0.25)'
-      : '0 2px 6px rgba(0,0,0,0.18)',
+      ? 'rgba(0, 0, 0, 0.35) 4px 4px 10px 0px, rgb(254, 254, 254) 1px 1px 0px 1px inset, rgb(132, 133, 132) -1px -1px 0px 1px inset'
+      : 'none',
   }
 
   if (faceDown) {

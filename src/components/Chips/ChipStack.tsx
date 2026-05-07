@@ -1,59 +1,28 @@
 import { palette } from '../../palette'
+import { Chip, type ChipSize } from './Chip'
 
 interface ChipStackProps {
   count: number
   playerName?: string
+  size?: ChipSize
+  stagger?: boolean
 }
 
 const DENOMINATIONS = [100, 25, 10, 5, 1] as const
 type Denom = typeof DENOMINATIONS[number]
 
-const SPRITE_URL = '/cards.png'
-const SHEET_W = 923
-const SHEET_H = 576
-const NATIVE_CHIP = 36
-const ORIGIN_X = 675
-const ORIGIN_Y = 480
-
-const SCALE = 1
-const CHIP_W = NATIVE_CHIP * SCALE
-const CHIP_H = NATIVE_CHIP * SCALE
-const SLICE = 6 * SCALE
 const MAX_VISIBLE = 10
 
-// Cluster layout:
-//   0 1 2       top row, behind
-//    3 4        bottom row, in front (offset by half-step)
-const SLOT_GAP_X = 0
-const SLOT_STEP = CHIP_W + SLOT_GAP_X
-// Big enough that back-row chips peek their denomination markings above the
-// front row instead of getting fully occluded.
-const ROW_OFFSET_Y = 20 * SCALE
-
-// Cluster layout — present denoms fill slots 0..N-1 left-to-right, smallest
-// first, so a full 5-stack arrangement looks like:
-//   $1 $5 $10        top row (z=1, behind)
-//    $25 $100        bottom row (z=2, in front)
-// With fewer stacks, the leftover slots are simply unused (still adjacent).
-const SLOTS = [
-  { left: 0,                     bottom: ROW_OFFSET_Y, z: 1 },
-  { left: SLOT_STEP,             bottom: ROW_OFFSET_Y, z: 1 },
-  { left: 2 * SLOT_STEP,         bottom: ROW_OFFSET_Y, z: 1 },
-  { left: SLOT_STEP / 2,         bottom: 0,            z: 2 },
-  { left: 3 * SLOT_STEP / 2,     bottom: 0,            z: 2 },
-] as const
+// Per-size geometry. SLICE is the visible rim of each chip in a vertical stack;
+// ROW_OFFSET_Y is the back-row lift so denominations peek above the front row.
+// Both scale with chip size to keep the cluster proportional.
+const GEOMETRY: Record<ChipSize, { slice: number; rowOffsetY: number }> = {
+  18: { slice: 3, rowOffsetY: 10 },
+  36: { slice: 6, rowOffsetY: 20 },
+}
 
 // Smallest first — fills back row before the front row.
 const FILL_ORDER = [1, 5, 10, 25, 100] as const
-
-// Big-chip sprite layout: cols index denomination, rows index variant.
-const DENOM_COL: Record<Denom, number> = {
-  1:   0,
-  5:   1,
-  10:  2,
-  25:  3,
-  100: 4,
-}
 
 // Each non-$100 stack is capped at this many chips.
 const STACK_CAP = 5
@@ -85,21 +54,31 @@ function variantFor(denom: number, index: number): 0 | 1 {
   return ((h >>> 0) & 1) as 0 | 1
 }
 
-function chipSpriteStyle(denom: Denom, variant: 0 | 1): React.CSSProperties {
-  const x = ORIGIN_X + DENOM_COL[denom] * NATIVE_CHIP
-  const y = ORIGIN_Y + variant * NATIVE_CHIP
-  return {
-    width: CHIP_W,
-    height: CHIP_H,
-    backgroundImage: `url(${SPRITE_URL})`,
-    backgroundSize: `${SHEET_W * SCALE}px ${SHEET_H * SCALE}px`,
-    backgroundPosition: `-${x * SCALE}px -${y * SCALE}px`,
-    backgroundRepeat: 'no-repeat',
-    imageRendering: 'pixelated',
-  }
+// Hand-stacked chips lean. 50% the chip rests dead-on the one below it; 50%
+// it picks a fresh offset in [-3, +3]. First chip is dead center.
+function nextDx(denom: number, index: number, prev: number): number {
+  const h = ((denom * 2654435761) ^ (index * 40503) ^ 0xa5a5a5a5) >>> 0
+  if ((h & 1) === 0) return prev
+  return ((h >>> 1) % 7) - 3
 }
 
-export function ChipStack({ count, playerName }: ChipStackProps) {
+// Compact mini-chip row — one 18×18 chip per denomination present in the
+// breakdown of `count`. Used in score callouts where a full ChipStack would
+// be too tall.
+export function MiniChipRow({ count }: { count: number }) {
+  if (count <= 0) return null
+  const breakdown = breakIntoChips(count)
+  const present = FILL_ORDER.filter(d => breakdown[d] > 0)
+  return (
+    <span style={{ display: 'inline-flex', gap: 1, alignItems: 'center' }}>
+      {present.map((d, i) => (
+        <Chip key={d} denom={d} size={18} variant={variantFor(d, i)} />
+      ))}
+    </span>
+  )
+}
+
+export function ChipStack({ count, playerName, size = 36, stagger = true }: ChipStackProps) {
   if (count <= 0) {
     return (
       <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, verticalAlign: 'bottom' }}>
@@ -111,6 +90,20 @@ export function ChipStack({ count, playerName }: ChipStackProps) {
     )
   }
 
+  const { slice, rowOffsetY } = GEOMETRY[size]
+  const slotStep = size
+  // Cluster layout — present denoms fill slots 0..N-1 left-to-right, smallest
+  // first, so a full 5-stack arrangement looks like:
+  //   $1 $5 $10        top row (z=1, behind)
+  //    $25 $100        bottom row (z=2, in front)
+  const slots = [
+    { left: 0,                 bottom: rowOffsetY, z: 1 },
+    { left: slotStep,          bottom: rowOffsetY, z: 1 },
+    { left: 2 * slotStep,      bottom: rowOffsetY, z: 1 },
+    { left: slotStep / 2,      bottom: 0,          z: 2 },
+    { left: 3 * slotStep / 2,  bottom: 0,          z: 2 },
+  ]
+
   const breakdown = breakIntoChips(count)
   const presentDenoms = FILL_ORDER.filter(d => breakdown[d] > 0)
 
@@ -118,12 +111,12 @@ export function ChipStack({ count, playerName }: ChipStackProps) {
   let bottomMax = 0
   let maxRight = 0
   for (let i = 0; i < presentDenoms.length; i++) {
-    const slot = SLOTS[i]
+    const slot = slots[i]
     const visible = Math.min(breakdown[presentDenoms[i]], MAX_VISIBLE)
-    const stackHeight = (visible - 1) * SLICE + CHIP_H
+    const stackHeight = (visible - 1) * slice + size
     if (i >= 3) bottomMax = Math.max(bottomMax, stackHeight)
-    else        topMax    = Math.max(topMax, stackHeight + ROW_OFFSET_Y)
-    maxRight = Math.max(maxRight, slot.left + CHIP_W)
+    else        topMax    = Math.max(topMax, stackHeight + rowOffsetY)
+    maxRight = Math.max(maxRight, slot.left + size)
   }
   const containerH = Math.max(topMax, bottomMax)
 
@@ -146,15 +139,18 @@ export function ChipStack({ count, playerName }: ChipStackProps) {
         }}
       >
         {presentDenoms.map((d, i) => {
-          const { left, bottom, z } = SLOTS[i]
+          const { left, bottom, z } = slots[i]
           return (
             <SingleStack
               key={d}
               denom={d}
               count={breakdown[d]}
+              size={size}
+              slice={slice}
               left={left}
               bottom={bottom}
               zIndex={z}
+              stagger={stagger}
             />
           )
         })}
@@ -182,17 +178,28 @@ function ChipStackLabel({ playerName, count }: { playerName: string; count: numb
 }
 
 function SingleStack({
-  denom, count, left, bottom, zIndex,
+  denom, count, size, slice, left, bottom, zIndex, stagger,
 }: {
   denom: Denom
   count: number
+  size: ChipSize
+  slice: number
   left: number
   bottom: number
   zIndex: number
+  stagger: boolean
 }) {
   const visible = Math.min(count, MAX_VISIBLE)
   const overflow = count - visible
-  const stackHeight = (visible - 1) * SLICE + CHIP_H
+  const stackHeight = (visible - 1) * slice + size
+
+  const dxs: number[] = []
+  let prev = 0
+  for (let i = 0; i < visible; i++) {
+    const dx = !stagger || i === 0 ? 0 : nextDx(denom, i, prev)
+    dxs.push(dx)
+    prev = dx
+  }
 
   return (
     <span
@@ -200,28 +207,26 @@ function SingleStack({
         position: 'absolute',
         left,
         bottom,
-        width: CHIP_W + (overflow > 0 ? 20 : 0),
+        width: size + (overflow > 0 ? 20 : 0),
         height: stackHeight,
         zIndex,
       }}
       title={`${count} × $${denom}`}
     >
       {Array.from({ length: visible }).map((_, i) => (
-        <span
+        <Chip
           key={i}
-          style={{
-            position: 'absolute',
-            left: 0,
-            bottom: i * SLICE,
-            ...chipSpriteStyle(denom, variantFor(denom, i)),
-          }}
+          denom={denom}
+          size={size}
+          variant={variantFor(denom, i)}
+          style={{ position: 'absolute', left: dxs[i], bottom: i * slice }}
         />
       ))}
       {overflow > 0 && (
         <span
           style={{
             position: 'absolute',
-            left: CHIP_W + 2,
+            left: size + 2,
             bottom: 2,
             fontSize: 11,
             fontWeight: 700,

@@ -4,7 +4,9 @@ import { palette } from '../palette'
 import { RulesModal } from './RulesModal'
 import { AboutModal } from './AboutModal'
 import { ApiSpecModal } from './ApiSpecModal'
+import { GameLogModal } from './GameLogModal'
 import { CardBackPicker } from './CardBackPicker/CardBackPicker'
+import { buildSpectatorLink } from '../lib/inviteLink'
 import { MenuBar } from './MenuBar'
 import { LayoutGroup } from 'framer-motion'
 import type { ClientGameState } from '@shared/engine/state-machine'
@@ -23,6 +25,7 @@ interface GameScreenProps {
   state: ClientGameState
   myPlayerId: string
   roomId: string
+  password?: string
   send: (message: ClientMessage) => void
   presence: Map<string, PlayerPresence>
   onLeave: () => void
@@ -32,12 +35,13 @@ function cardKey(c: Card) { return `${c.rank}-${c.suit}` }
 
 interface HandSlot { id: number; card: Card }
 
-export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave }: GameScreenProps) {
+export function GameScreen({ state, myPlayerId, roomId, password, send, presence, onLeave }: GameScreenProps) {
   const [selected, setSelected] = useState<number[]>([])
   const [rulesOpen, setRulesOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [apiOpen, setApiOpen] = useState(false)
   const [cardBackOpen, setCardBackOpen] = useState(false)
+  const [gameLogOpen, setGameLogOpen] = useState(false)
   const [cardOrder, setCardOrder] = useState<HandSlot[]>([])
   const [discardingCards, setDiscardingCards] = useState<HandSlot[]>([])
   const [myLastPlaySlotIds, setMyLastPlaySlotIds] = useState<number[] | null>(null)
@@ -77,12 +81,17 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   }, [cardOrder])
 
   useEffect(() => {
-    setSelected([])
-  }, [state.currentPlayerId, state.turnPhase])
-
-  useEffect(() => {
     if (state.currentHandPlays.length === 0) setMyLastPlaySlotIds(null)
   }, [state.currentHandPlays.length])
+
+  // Staged bet/raise total committed across the current betting turn. null = not staging.
+  // Used to preview a chip transfer from the player's stack to the "current bet" stack
+  // in the ActionBar before the action is committed.
+  const [bettingTarget, setBettingTarget] = useState<number | null>(null)
+  useEffect(() => {
+    // Reset whenever the turn or bet line changes — a stale staged target may now be invalid.
+    setBettingTarget(null)
+  }, [state.turnPhase, state.currentPlayerId, state.betToMatch])
 
   useEffect(() => {
     const handOrder = cardOrder.map(s => s.id)
@@ -90,8 +99,9 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
     const selectedPositions = cardOrder
       .map((s, i) => selectedSet.has(s.id) ? i : -1)
       .filter(i => i >= 0)
-    send({ type: 'PRESENCE', handOrder, selectedPositions })
-  }, [selected, cardOrder]) // eslint-disable-line react-hooks/exhaustive-deps
+    const stagedBet = bettingTarget != null && bettingTarget > 0 ? bettingTarget : undefined
+    send({ type: 'PRESENCE', handOrder, selectedPositions, bettingTarget: stagedBet })
+  }, [selected, cardOrder, bettingTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const opponents = state.players.filter(p => p.id !== myPlayerId)
 
@@ -165,15 +175,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   function handleBet(amount: number) { send({ type: 'BET', amount }) }
   function handleRaise(amount: number) { send({ type: 'RAISE', amount }) }
 
-  // Staged bet/raise total committed across the current betting turn. null = not staging.
-  // Used to preview a chip transfer from the player's stack to the "current bet" stack
-  // in the ActionBar before the action is committed.
-  const [bettingTarget, setBettingTarget] = useState<number | null>(null)
-  useEffect(() => {
-    // Reset whenever the turn or bet line changes — a stale staged target may now be invalid.
-    setBettingTarget(null)
-  }, [state.turnPhase, state.currentPlayerId, state.betToMatch])
-
   function sortByRank() {
     setCardOrder(prev =>
       [...prev].sort((a, b) =>
@@ -198,14 +199,24 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   const pendingBet = bettingTarget != null
     ? Math.max(0, Math.min(bettingTarget, state.scores[myPlayerId] ?? 0))
     : 0
+  const stagedBetOf = (id: string): number => {
+    if (id === myPlayerId) return pendingBet
+    const target = presence.get(id)?.bettingTarget
+    if (target == null || target <= 0) return 0
+    return Math.max(0, Math.min(target, state.scores[id] ?? 0))
+  }
   const chipCountOf = (id: string): number | null => {
     if (!isChipsMode) return null
     const base = state.scores[id] ?? 0
-    if (id === myPlayerId && pendingBet > 0) return Math.max(0, base - pendingBet)
+    const staged = stagedBetOf(id)
+    if (staged > 0) return Math.max(0, base - staged)
     return base
   }
   const chipCounts: Record<string, number> | undefined = isChipsMode
     ? Object.fromEntries(state.players.map(p => [p.id, chipCountOf(p.id) ?? 0]))
+    : undefined
+  const stagedBets: Record<string, number> | undefined = isChipsMode
+    ? Object.fromEntries(state.players.map(p => [p.id, stagedBetOf(p.id)]))
     : undefined
   const myPlayerName = state.players.find(p => p.id === myPlayerId)?.name
 
@@ -258,12 +269,15 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           {
             name: '&Game',
             items: [
+              { label: 'Copy &spectator link', onClick: () => navigator.clipboard.writeText(buildSpectatorLink(roomId, password)) },
+              { divider: true, label: '' },
               { label: '&Leave game', onClick: onLeave },
             ],
           },
           {
             name: '&View',
             items: [
+              { label: 'Game &log...', onClick: () => setGameLogOpen(true) },
               { label: '&Card backs...', onClick: () => setCardBackOpen(true) },
             ],
           },
@@ -331,6 +345,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   allPlayers={state.players}
                   orientation="across"
                   chipCount={chipCountOf(orderedOpponents[1].id)}
+                  pendingBet={stagedBets?.[orderedOpponents[1].id] ?? 0}
                 />
               </div>
 
@@ -345,6 +360,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   allPlayers={state.players}
                   orientation="left"
                   chipCount={chipCountOf(orderedOpponents[0].id)}
+                  pendingBet={stagedBets?.[orderedOpponents[0].id] ?? 0}
                 />
               </div>
 
@@ -363,6 +379,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   allPlayers={state.players}
                   orientation="right"
                   chipCount={chipCountOf(orderedOpponents[2].id)}
+                  pendingBet={stagedBets?.[orderedOpponents[2].id] ?? 0}
                 />
               </div>
 
@@ -375,7 +392,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   onReorder={handleReorder}
                   onSortByRank={sortByRank}
                   onSortBySuit={sortBySuit}
-                  disabled={state.currentPlayerId !== myPlayerId}
                   deckSize={state.myDeckSize}
                   discardingCards={discardingCards}
                   isDealer={state.dealerId === myPlayerId}
@@ -396,6 +412,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 presence={presence}
                 events={state.events}
                 chipCounts={chipCounts}
+                stagedBets={stagedBets}
               />
 
               <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
@@ -408,7 +425,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 onReorder={handleReorder}
                 onSortByRank={sortByRank}
                 onSortBySuit={sortBySuit}
-                disabled={state.currentPlayerId !== myPlayerId}
                 deckSize={state.myDeckSize}
                 discardingCards={discardingCards}
                 isDealer={state.dealerId === myPlayerId}
@@ -438,6 +454,14 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}
+      {gameLogOpen && (
+        <GameLogModal
+          events={state.events}
+          players={state.players}
+          myPlayerId={myPlayerId}
+          onClose={() => setGameLogOpen(false)}
+        />
+      )}
     </Frame>
   )
 }

@@ -4,6 +4,7 @@
 export interface PlayerPresence {
   handOrder: number[]         // stable slot IDs in current display order
   selectedPositions: number[] // which display positions (indices into handOrder) are raised
+  bettingTarget?: number      // chips staged for bet/raise this turn, not yet committed
 }
 
 // Outbound: client → server. Wire format for "I'm rearranging cards / changing selection."
@@ -11,6 +12,7 @@ export interface PresenceClientMessage {
   type: 'PRESENCE'
   handOrder: number[]
   selectedPositions: number[]
+  bettingTarget?: number
 }
 
 // Inbound: server → client. The server tags the originating player and re-broadcasts.

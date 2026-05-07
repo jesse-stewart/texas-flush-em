@@ -111,7 +111,7 @@ export default class GameParty implements Party.Server {
     // Presence is a separate channel: relay-only, never reaches applyCommand.
     const presence = parsePresenceMessage(raw)
     if (presence) {
-      const relay = JSON.stringify({ type: 'PRESENCE', playerId: sender.id, handOrder: presence.handOrder, selectedPositions: presence.selectedPositions })
+      const relay = JSON.stringify({ type: 'PRESENCE', playerId: sender.id, handOrder: presence.handOrder, selectedPositions: presence.selectedPositions, bettingTarget: presence.bettingTarget })
       for (const conn of this.room.getConnections()) {
         if (conn.id !== sender.id) conn.send(relay)
       }

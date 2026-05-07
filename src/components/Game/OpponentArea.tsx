@@ -5,6 +5,7 @@ import type { PlayerPresence } from '../../transport/presence'
 import type { Card as CardType } from '@shared/engine/card'
 import type { BotDifficulty, GameEvent } from '@shared/engine/game-state'
 import { Card } from '../Card/Card'
+import { CardStack } from '../Card/CardStack'
 import { Hand } from '../Hand/Hand'
 import { ChipStack } from '../Chips/ChipStack'
 import { EventBubble } from './EventBubble'
@@ -25,9 +26,10 @@ interface OpponentAreaProps {
   presence: Map<string, PlayerPresence>
   events: GameEvent[]
   chipCounts?: Record<string, number>
+  stagedBets?: Record<string, number>
 }
 
-export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events, chipCounts }: OpponentAreaProps) {
+export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerId, dealerId, presence, events, chipCounts, stagedBets }: OpponentAreaProps) {
   if (opponents.length === 0) return null
 
   // Opponents shown at the top are always across the table from me, so flip
@@ -46,6 +48,7 @@ export function OpponentArea({ opponents, allPlayers, myPlayerId, currentPlayerI
           allPlayers={allPlayers}
           orientation="across"
           chipCount={chipCounts?.[p.id] ?? null}
+          pendingBet={stagedBets?.[p.id] ?? 0}
         />
       ))}
     </div>
@@ -63,14 +66,9 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
 // doesn't shrink the seat and shift the row.
 const HAND_SLOT_WIDTH = 71 + 9 * 22
 
-// Visual cap on the deck stack — matches the `Math.min(deckCount, 4)` logic
-// below. Used to reserve constant slot dimensions so the deck pile doesn't
-// shrink horizontally as cards leave the deck.
-const DECK_MAX_LAYERS = 4
-
 export function OpponentSeat({
   player, isActive, isDealer, presence, events, myPlayerId, allPlayers,
-  orientation = 'horizontal', chipCount,
+  orientation = 'horizontal', chipCount, pendingBet = 0,
 }: {
   player: PlayerView
   isActive: boolean
@@ -81,12 +79,17 @@ export function OpponentSeat({
   allPlayers: PlayerView[]
   orientation?: 'horizontal' | 'across' | 'left' | 'right'
   chipCount?: number | null
+  pendingBet?: number
 }) {
   const isVertical = orientation === 'left' || orientation === 'right'
   const isAcross = orientation === 'across'
+  // Top and bottom seats both rotate the Hand 180° so its `paddingTop: 60`
+  // (reserved for the player's own lift-up animation) becomes bottom padding,
+  // letting the cards top-align with the chip stack and deck. Selected cards
+  // also visually lift toward the table center as a side effect.
+  const flipHand = isAcross || orientation === 'horizontal'
   const handCount = player.handSize
   const deckCount = player.deckSize
-  const deckLayers = Math.min(deckCount, 4)
 
   const handOrder: number[] =
     presence && presence.handOrder.length === handCount
@@ -131,7 +134,7 @@ export function OpponentSeat({
           backgroundColor: player.isConnected ? palette.lime : palette.midGray,
           flexShrink: 0,
         }} />
-        <span style={{ fontWeight: 700 }}>
+        <span>
           {player.name}
         </span>
         <span style={hourglassSlotStyle}>
@@ -162,6 +165,9 @@ export function OpponentSeat({
       <div style={
         orientation === 'left' ? pilesVerticalLeftStyle :
         orientation === 'right' ? pilesVerticalRightStyle :
+        // Bottom seat mirrors the top seat — chips, deck, hand left to right —
+        // so the spectator sees a symmetric table.
+        orientation === 'horizontal' ? { ...pilesStyle, flexDirection: 'row-reverse' } :
         pilesStyle
       }>
         {/* Hand slot reserves max width (10 cards) so the seat — and the row — don't
@@ -171,12 +177,14 @@ export function OpponentSeat({
           {handCount === 0 ? (
             <span style={emptyLabelStyle}>empty</span>
           ) : isVertical ? (
-            <VerticalCardStack count={handCount} direction={orientation as 'left' | 'right'} />
+            <VerticalCardStack count={handCount} direction={orientation as 'left' | 'right'} selectedIndices={selectedIndices} />
           ) : (
-            // For 'across' the entire Hand is rotated 180° so each card visually
-            // flips upside-down (matches an opponent across the table), while the
-            // surrounding pile group / labels stay readable.
-            <div style={isAcross ? { transform: 'rotate(180deg)' } : undefined}>
+            // For 'across' and 'horizontal' the entire Hand is rotated 180°.
+            // 'across' makes opponent cards visually face away from the spectator;
+            // 'horizontal' (bottom seat) reuses the rotation to convert the Hand's
+            // top-padding (reserved for lift animations) into bottom padding so
+            // the cards top-align with the chip stack and deck.
+            <div style={flipHand ? { transform: 'rotate(180deg)' } : undefined}>
               <Hand
                 cards={fakeCards}
                 ids={handOrder.map(id => `${player.id}-${id}`)}
@@ -193,62 +201,44 @@ export function OpponentSeat({
         <div style={isVertical ? pileDividerVerticalStyle : pileDividerStyle} />
 
         <div style={pileGroupStyle}>
-          {/* Container reserves space for a 4-deep stack (the visual cap) so the
-              piles row doesn't shrink horizontally as the deck empties. */}
-          <div
-            style={{
-              position: 'relative',
-              width: (isVertical ? 96 : 71) + DECK_MAX_LAYERS * 3,
-              height: (isVertical ? 71 : 96) + DECK_MAX_LAYERS * 3,
-            }}
-          >
-            {deckCount === 0 ? (
-              <div style={isVertical ? deckPlaceholderVerticalStyle : deckPlaceholderStyle}>
-                <span style={emptyLabelStyle}>empty</span>
-              </div>
-            ) : (
-              Array.from({ length: deckLayers }).map((_, i) =>
-                isVertical ? (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      top: i * 3,
-                      left: (deckLayers - 1 - i) * 3,
-                      width: 71,
-                      height: 96,
-                      transformOrigin: 'top left',
-                      transform: orientation === 'left'
-                        ? 'translateX(96px) rotate(90deg)'
-                        : 'translateY(71px) rotate(-90deg)',
-                      zIndex: i,
-                    }}
-                  >
-                    <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-                  </div>
-                ) : (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      left: i * 3,
-                      top: (deckLayers - 1 - i) * 2,
-                      zIndex: i,
-                      transform: isAcross ? 'rotate(180deg)' : undefined,
-                    }}
-                  >
-                    <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-                  </div>
-                )
-              )
-            )}
-          </div>
+          <CardStack
+            count={deckCount}
+            rotation={
+              orientation === 'left' ? 90
+              : orientation === 'right' ? -90
+              : isAcross ? 180
+              : 0
+            }
+            showEmpty
+          />
           <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{deckCount} in deck</span>
         </div>
 
         {chipCount != null && (
-          <div style={pileGroupStyle}>
+          // Wrapper is `position: relative` so the staged-bet pile can float
+          // off to the side without widening the seat (which would push the
+          // chip stack off-center the moment betting starts).
+          <div style={{ ...pileGroupStyle, position: 'relative' }}>
             <ChipStack count={chipCount} playerName={player.name} />
+            {pendingBet > 0 && (
+              <div style={{
+                position: 'absolute',
+                ...(orientation === 'right'
+                  ? { right: '100%', bottom: 0, transform: 'translateX(-12px)' }
+                  : orientation === 'horizontal'
+                  ? { bottom: '100%', left: '50%', transform: 'translate(-50%, -12px)' }
+                  : { left: '100%',  bottom: 0, transform: 'translateX(12px)' }),
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+              }}>
+                <ChipStack count={pendingBet} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: palette.white, textShadow: '1px 1px 0 rgba(0,0,0,0.6)', marginTop: -3, whiteSpace: 'nowrap' }}>
+                  betting ${pendingBet}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -260,35 +250,47 @@ export function OpponentSeat({
 // and overlaps the next, stacking down the column. Rotation pivots at top-left;
 // for 'left' we translate +H on X to bring the visual back into positive coords,
 // for 'right' we rotate the opposite way and translate +W on Y.
-function VerticalCardStack({ count, direction = 'left' }: { count: number; direction?: 'left' | 'right' }) {
+// Selected cards lift toward the table center (right for left-seat, left for
+// right-seat). The container reserves LIFT pixels of slack on the table-center
+// side so the slide-out doesn't get clipped.
+function VerticalCardStack({ count, direction = 'left', selectedIndices = [] }: { count: number; direction?: 'left' | 'right'; selectedIndices?: number[] }) {
   const STEP = 22
   const CARD_W = 71
   const CARD_H = 96
+  const LIFT = 14
+  const selectedSet = new Set(selectedIndices)
   return (
     <div style={{
       position: 'relative',
-      width: CARD_H,
+      width: CARD_H + LIFT,
       height: (count - 1) * STEP + CARD_W,
     }}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            position: 'absolute',
-            top: i * STEP,
-            left: 0,
-            width: CARD_W,
-            height: CARD_H,
-            transformOrigin: 'top left',
-            transform: direction === 'left'
-              ? `translateX(${CARD_H}px) rotate(90deg)`
-              : `translateY(${CARD_W}px) rotate(-90deg)`,
-            zIndex: i,
-          }}
-        >
-          <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-        </div>
-      ))}
+      {Array.from({ length: count }).map((_, i) => {
+        const lifted = selectedSet.has(i) ? LIFT : 0
+        // For 'right' the cards rest offset by LIFT on the X axis so a leftward
+        // lift (toward the table center) stays inside the container.
+        const transform = direction === 'left'
+          ? `translateX(${CARD_H + lifted}px) rotate(90deg)`
+          : `translateX(${LIFT - lifted}px) translateY(${CARD_W}px) rotate(-90deg)`
+        return (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              top: i * STEP,
+              left: 0,
+              width: CARD_W,
+              height: CARD_H,
+              transformOrigin: 'top left',
+              transform,
+              transition: 'transform 120ms',
+              zIndex: i,
+            }}
+          >
+            <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -401,17 +403,3 @@ const emptyLabelStyle: React.CSSProperties = {
   fontStyle: 'italic',
 }
 
-const deckPlaceholderStyle: React.CSSProperties = {
-  width: 71,
-  height: 96,
-  border: '2px dashed rgba(255,255,255,0.25)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-}
-
-const deckPlaceholderVerticalStyle: React.CSSProperties = {
-  ...deckPlaceholderStyle,
-  width: 96,
-  height: 71,
-}

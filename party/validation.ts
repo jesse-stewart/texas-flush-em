@@ -113,5 +113,8 @@ export function parsePresenceMessage(raw: unknown): PresenceClientMessage | null
   const m = raw as Record<string, unknown>
   if (m.type !== 'PRESENCE') return null
   if (!isNumberArray(m.handOrder) || !isNumberArray(m.selectedPositions)) return null
-  return { type: 'PRESENCE', handOrder: m.handOrder, selectedPositions: m.selectedPositions }
+  const bettingTarget = typeof m.bettingTarget === 'number' && Number.isFinite(m.bettingTarget) && m.bettingTarget > 0
+    ? m.bettingTarget
+    : undefined
+  return { type: 'PRESENCE', handOrder: m.handOrder, selectedPositions: m.selectedPositions, bettingTarget }
 }
