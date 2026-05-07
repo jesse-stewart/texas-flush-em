@@ -1055,9 +1055,6 @@ function applyFold(state: GameState, cmd: { playerId: string }): GameState {
 
   const player = state.players.find(p => p.id === cmd.playerId)
   if (!player) return state
-  // An all-in player has fully committed to the pot — they have no decision left and
-  // can't surrender chips they no longer have. Reject the fold so they can't throw the showdown.
-  if (player.allIn) return state
 
   const players = state.players.map(p => p.id === cmd.playerId ? { ...p, folded: true } : p)
   // Eliminated players keep folded=false across rounds (they're not "in" the hand),

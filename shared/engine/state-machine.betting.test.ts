@@ -265,41 +265,26 @@ describe('partial ante', () => {
 })
 
 // ============================================================
-// Regression: all-in player cannot fold
+// All-in player can fold (forfeits main-pot eligibility; chips already
+// committed stay in the pot for remaining players to contest).
 // ============================================================
 
-describe('all-in players cannot fold', () => {
-  it('rejects FOLD from an all-in player during the play phase', () => {
-    let s = startedBettingGame({ players: 2, ante: 5, threshold: 100 })
-    const [a, b] = turnOrder(s)
-    // Simulate "both players went all-in; betting closed; play phase; a is on turn".
+describe('all-in players can fold', () => {
+  it('accepts FOLD from an all-in player during the play phase', () => {
+    let s = startedBettingGame({ players: 3, ante: 5, threshold: 100 })
+    const [a, b, c] = turnOrder(s)
+    // Simulate "a went all-in from a partial ante; b and c called; play phase; a is on turn".
     s = {
       ...s,
       turnPhase: 'play',
       currentPlayerIndex: s.playerOrder.indexOf(a),
-      players: s.players.map(p => ({ ...p, allIn: true })),
-      pot: 200,
-      committed: { [a]: 100, [b]: 100 },
-      scores: { ...s.scores, [a]: 0, [b]: 0 },
-    }
-    const before = s
-    const after = applyCommand(s, { type: 'FOLD', playerId: a })
-    expect(after).toBe(before)
-  })
-
-  it('rejects FOLD from an all-in player during the bet phase', () => {
-    let s = startedBettingGame({ players: 3, ante: 5, threshold: 100 })
-    const [a] = turnOrder(s)
-    s = {
-      ...s,
       players: s.players.map(p => p.id === a ? { ...p, allIn: true } : p),
+      pot: 30,
+      committed: { [a]: 5, [b]: 5, [c]: 5 },
+      scores: { ...s.scores, [a]: 0 },
     }
-    // Even if the fold-issuing player isn't on turn, the all-in check still rejects.
-    // Force currentPlayerIndex to a so the turn-order guard passes and we hit the all-in guard.
-    s = { ...s, currentPlayerIndex: s.playerOrder.indexOf(a) }
-    const before = s
     const after = applyCommand(s, { type: 'FOLD', playerId: a })
-    expect(after).toBe(before)
+    expect(after.players.find(p => p.id === a)?.folded).toBe(true)
   })
 })
 
