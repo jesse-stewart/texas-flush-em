@@ -266,6 +266,7 @@ export default class GameParty implements Party.Server {
     this.room.storage.setAlarm(Date.now() + IDLE_TTL_MS)
 
     this.scheduleBotTurnIfNeeded()
+    this.scheduleAutoNextRoundIfNeeded()
   }
 
   private scheduleBotTurnIfNeeded() {
@@ -281,6 +282,27 @@ export default class GameParty implements Party.Server {
       if (seq !== this.botSeq) return
       this.runBotTurn(currentId)
     }, BOT_THINK_DELAY_MS)
+  }
+
+  // applyReadyForNextRound advances the round only when triggered, and only
+  // counts non-bot, non-eliminated, connected players as "required to ready".
+  // If every required player has already readied — or there are none (all
+  // humans eliminated/disconnected, only bots remain) — nothing ever calls it.
+  // Auto-dispatch NEXT_ROUND from the server in that case so the round
+  // doesn't sit in round_end forever while spectators watch a frozen board.
+  private scheduleAutoNextRoundIfNeeded() {
+    if (this.state.phase !== 'round_end') return
+    const required = this.state.players.filter(p => !p.isBot && !p.eliminated && p.connected)
+    const allReady = required.every(p => this.state.nextRoundReady[p.id])
+    if (!allReady) return
+
+    const seq = this.botSeq
+    this.botTimer = setTimeout(() => {
+      this.botTimer = null
+      if (seq !== this.botSeq) return
+      this.state = applyCommand(this.state, { type: 'NEXT_ROUND' })
+      this.broadcastState()
+    }, BOT_THINK_DELAY_MS * 3)
   }
 
   private runBotTurn(botId: string) {

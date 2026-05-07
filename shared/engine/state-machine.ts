@@ -502,13 +502,16 @@ function drawUpTo10(player: PlayerState): PlayerState {
   return { ...player, hand: [...player.hand, ...drawn], deck: remaining }
 }
 
-// Next player index clockwise who hasn't folded, starting after fromIndex
+// Next player index clockwise who hasn't folded and isn't eliminated, starting after fromIndex.
+// Eliminated must be checked explicitly: endHand resets `folded: false` for everyone (including
+// the just-eliminated), so without this check the turn pointer can land on an eliminated player
+// and freeze the game (no bot will act for them, and a human ex-player is now spectating).
 function nextActiveIndex(state: GameState, fromIndex: number): number {
   const len = state.playerOrder.length
   for (let i = 1; i < len; i++) {
     const idx = (fromIndex + i) % len
     const player = state.players.find(p => p.id === state.playerOrder[idx])
-    if (player && !player.folded) return idx
+    if (player && !player.folded && !player.eliminated) return idx
   }
   return fromIndex
 }
@@ -542,9 +545,13 @@ function endHand(
   // Chips mode: any player whose chips hit zero from this hand is eliminated. Without this,
   // they'd be carried into the next hand with $0 — startBettingRound would mark them folded
   // and the remaining player would just keep collecting their own ante forever.
+  // Newly-eliminated players' hand/deck are cleared so spectator views don't keep rendering
+  // their cards (matches applyLeave's behavior).
   const eliminatePlayers = bettingEnabled(state)
     ? players.map(p =>
-        !p.eliminated && (scores[p.id] ?? 0) <= 0 ? { ...p, eliminated: true } : p
+        !p.eliminated && (scores[p.id] ?? 0) <= 0
+          ? { ...p, eliminated: true, hand: [], deck: [] }
+          : p
       )
     : players
   const newlyEliminated = eliminatePlayers

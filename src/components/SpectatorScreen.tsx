@@ -80,7 +80,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         }}
       >
         <span style={{ fontWeight: 700 }}>Spectating</span>
-        {state.players.map(p => {
+        {state.players.filter(p => !p.eliminated).map(p => {
           const score = state.scores[p.id] ?? 0
           const isChips = state.options.scoringMode === 'chips'
           return (
@@ -106,13 +106,16 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         }}
       >
         <OpponentArea
-          opponents={state.players}
+          opponents={state.players.filter(p => !p.eliminated)}
           allPlayers={state.players}
           myPlayerId=""
           currentPlayerId={state.currentPlayerId}
           dealerId={state.dealerId}
           presence={presence}
           events={state.events}
+          chipCounts={state.options.scoringMode === 'chips'
+            ? Object.fromEntries(state.players.map(p => [p.id, state.scores[p.id] ?? 0]))
+            : undefined}
         />
 
         <TableCenter state={state} myPlayerId="" myLastPlaySlotIds={null} />

@@ -113,9 +113,11 @@ export function chooseBettingAction(
     return { type: 'CALL' }
   }
 
-  // Otherwise fold — but if calling is free-ish (owe is tiny relative to stack
-  // and pot is large), still call. Avoids dumb folds when the threshold is barely missed.
-  if (owe <= state.options.anteAmount && stack > owe * 4) {
+  // Cards persist across hands within a round. Folding to a small bet on a weak
+  // hand traps the bot — same weak hand next time, fold again, forever. Calling
+  // gets us to the discard phase to refresh. So always call when the cost is
+  // tiny relative to our stack, regardless of strength.
+  if (stack >= owe * 20) {
     return { type: 'CALL' }
   }
 

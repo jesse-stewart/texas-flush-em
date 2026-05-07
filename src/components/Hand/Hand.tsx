@@ -45,7 +45,7 @@ function SortableCard({
   pos: number
   overlap: number
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
   const [hovered, setHovered] = useState(false)
 
   const liftY = selected ? (flip ? 14 : -14) : hovered && !disabled ? (flip ? 8 : -8) : 0
@@ -53,8 +53,8 @@ function SortableCard({
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
