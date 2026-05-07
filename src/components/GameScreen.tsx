@@ -8,7 +8,7 @@ import { CardBackPicker } from './CardBackPicker/CardBackPicker'
 import { MenuBar } from './MenuBar'
 import { LayoutGroup } from 'framer-motion'
 import type { ClientGameState } from '@shared/engine/state-machine'
-import type { GameAction } from '../transport/types'
+import type { ClientMessage } from '../transport/types'
 import type { PlayerPresence } from '../transport/presence'
 import type { Card } from '@shared/engine/card'
 import { rankValue, suitValue } from '@shared/engine/card'
@@ -23,7 +23,7 @@ interface GameScreenProps {
   state: ClientGameState
   myPlayerId: string
   roomId: string
-  send: (action: GameAction) => void
+  send: (message: ClientMessage) => void
   presence: Map<string, PlayerPresence>
   onLeave: () => void
 }
@@ -90,7 +90,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
     const selectedPositions = cardOrder
       .map((s, i) => selectedSet.has(s.id) ? i : -1)
       .filter(i => i >= 0)
-    send({ type: 'PRESENCE', handOrder, selectedPositions } as unknown as GameAction)
+    send({ type: 'PRESENCE', handOrder, selectedPositions })
   }, [selected, cardOrder]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const opponents = state.players.filter(p => p.id !== myPlayerId)

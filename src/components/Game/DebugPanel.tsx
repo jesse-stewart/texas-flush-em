@@ -1,12 +1,12 @@
 import { Frame } from '@react95/core'
 import { Button } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
-import type { GameAction } from '../../transport/types'
+import type { ClientMessage } from '../../transport/types'
 
 interface DebugPanelProps {
   state: ClientGameState
   myPlayerId: string
-  send: (action: GameAction) => void
+  send: (message: ClientMessage) => void
 }
 
 export function DebugPanel({ state, myPlayerId, send }: DebugPanelProps) {

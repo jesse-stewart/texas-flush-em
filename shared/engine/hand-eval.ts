@@ -266,8 +266,28 @@ export function evaluateHand(cards: Card[]): EvaluatedHand | null {
   }
 }
 
-// Convenience: return the category name as a display string
+// Display-friendly title-cased name per category. Pinned by hand so connector
+// words ("of", "a") stay lowercase — title-casing the enum string mechanically
+// would give "Three Of A Kind" instead of "Three of a Kind".
+const CATEGORY_NAMES: Record<HandCategory, string> = {
+  [HandCategory.HIGH_CARD]: 'High Card',
+  [HandCategory.PAIR]: 'Pair',
+  [HandCategory.FLUSH_PAIR]: 'Flush Pair',
+  [HandCategory.TWO_PAIR]: 'Two Pair',
+  [HandCategory.FLUSH_TWO_PAIR]: 'Flush Two Pair',
+  [HandCategory.THREE_OF_A_KIND]: 'Three of a Kind',
+  [HandCategory.FLUSH_THREE_OF_A_KIND]: 'Flush Three of a Kind',
+  [HandCategory.STRAIGHT]: 'Straight',
+  [HandCategory.FLUSH]: 'Flush',
+  [HandCategory.FULL_HOUSE]: 'Full House',
+  [HandCategory.FLUSH_FULL_HOUSE]: 'Flush Full House',
+  [HandCategory.FOUR_OF_A_KIND]: 'Four of a Kind',
+  [HandCategory.FLUSH_FOUR_OF_A_KIND]: 'Flush Four of a Kind',
+  [HandCategory.STRAIGHT_FLUSH]: 'Straight Flush',
+  [HandCategory.FIVE_OF_A_KIND]: 'Five of a Kind',
+  [HandCategory.ROYAL_FLUSH]: 'Royal Flush',
+}
+
 export function handCategoryName(category: HandCategory): string {
-  return HandCategory[category].replace(/_/g, ' ').toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase())
+  return CATEGORY_NAMES[category]
 }

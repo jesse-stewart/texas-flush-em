@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCommand, initialState } from './state-machine'
+import { applyCommand, computeSidePots, initialState } from './state-machine'
 import type { GameState } from './game-state'
 
 // ============================================================
@@ -361,5 +361,85 @@ describe('betting disabled (anteAmount=0)', () => {
     s = applyCommand(s, { type: 'START_GAME', options: { scoringMode: 'points', anteAmount: 5 } })
     expect(s.turnPhase).toBe('discard')
     expect(s.pot).toBe(0)
+  })
+})
+
+// ============================================================
+// Multi-tier side pots — three players at three different commitment levels.
+// These exercise the tier-math and eligibility filtering directly so subtle bugs
+// in computeSidePots don't hide behind the integration paths in endHand/endRound.
+// ============================================================
+
+// Build a minimal state with three players and given committed amounts, optionally
+// marking some folded. Other GameState fields are filled with sensible defaults.
+function stateWith(
+  committed: Record<string, number>,
+  folded: Set<string> = new Set(),
+): GameState {
+  const ids = Object.keys(committed)
+  const s = startedBettingGame({ players: ids.length, ante: 0, threshold: 1000 })
+  return {
+    ...s,
+    players: s.players.map((p, i) => ({
+      ...p,
+      id: ids[i],
+      folded: folded.has(ids[i]),
+    })),
+    playerOrder: ids,
+    committed: { ...committed },
+  }
+}
+
+describe('computeSidePots — multi-tier all-in', () => {
+  it('builds three correctly-sized tiers when three stacks differ', () => {
+    // a=100, b=30, c=15. Tier ladder: 15 → 30 → 100.
+    //  tier 15 (everyone reaches 15): 15×3 = 45, eligible {a,b,c}
+    //  tier 30 (a and b reach 30, contribute 15 each above prev): 30, eligible {a,b}
+    //  tier 100 (only a reaches 100, contributes 70 above prev): 70, eligible {a}
+    const pots = computeSidePots(stateWith({ a: 100, b: 30, c: 15 }))
+    expect(pots).toEqual([
+      { amount: 45, eligiblePlayerIds: ['a', 'b', 'c'] },
+      { amount: 30, eligiblePlayerIds: ['a', 'b'] },
+      { amount: 70, eligiblePlayerIds: ['a'] },
+    ])
+  })
+
+  it("excludes folded players from eligibility but still flows their committed chips into eligible tiers", () => {
+    // a=50, b=30, c=15, but b folded. Tiers are derived from non-folded commitments only,
+    // so b's 30 doesn't seed its own tier — its chips spread across the {15, 50} tiers
+    // that the eligible players (a, c) define.
+    //  tier 15: amount = min(50,15)+min(30,15)+min(15,15) = 45, eligible {a,c}
+    //  tier 50: amount = (50-15) + (30-15) + 0 = 50, eligible {a}
+    // No chips lost: 50+30+15 = 95 total = 45 + 50. ✓
+    const pots = computeSidePots(stateWith({ a: 50, b: 30, c: 15 }, new Set(['b'])))
+    expect(pots).toEqual([
+      { amount: 45, eligiblePlayerIds: ['a', 'c'] },
+      { amount: 50, eligiblePlayerIds: ['a'] },
+    ])
+  })
+
+  it('rolls orphaned folded-player chips into the top pot when no higher non-folded tier exists', () => {
+    // a=50, b=50 (both folded), c=15 (lone non-folded). Without the orphan-rollup,
+    // c only collects the 15-tier (45 chips) and the 70 chips a and b put in above
+    // that vanish. With the rollup, all 115 committed chips end up in c's pot — c is
+    // the only player still in the hand, so there's no one else who could compete
+    // for those chips at any tier.
+    const pots = computeSidePots(stateWith({ a: 50, b: 50, c: 15 }, new Set(['a', 'b'])))
+    expect(pots).toEqual([
+      { amount: 115, eligiblePlayerIds: ['c'] },
+    ])
+  })
+
+  it('rolls orphan chips into the highest eligible tier even when multiple eligible tiers exist', () => {
+    // a=100 (folded), b=50, c=15 (both non-folded). Tiers from non-folded = {15, 50}.
+    //  tier 15: 15+15+15 = 45, eligible {b,c}
+    //  tier 50: (50-15)+(50-15)+0 = 70, eligible {b} (a is folded, c didn't reach 50)
+    // a's commit above tier 50 (100-50=50) is orphaned — it would otherwise vanish.
+    // It rolls into the top pot (the 50-tier with b eligible), bringing it to 120.
+    const pots = computeSidePots(stateWith({ a: 100, b: 50, c: 15 }, new Set(['a'])))
+    expect(pots).toEqual([
+      { amount: 45, eligiblePlayerIds: ['b', 'c'] },
+      { amount: 120, eligiblePlayerIds: ['b'] },
+    ])
   })
 })

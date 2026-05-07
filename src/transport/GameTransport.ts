@@ -1,4 +1,4 @@
-import type { GameAction, GameEvent } from './types'
+import type { ClientMessage, GameEvent } from './types'
 
 export interface ConnectOptions {
   password?: string
@@ -14,7 +14,7 @@ export interface ConnectionError {
 export interface GameTransport {
   connect(roomId: string, playerId: string, options?: ConnectOptions): void
   disconnect(): void
-  send(action: GameAction): void
+  send(message: ClientMessage): void
   onEvent(handler: (event: GameEvent) => void): () => void      // returns unsubscribe fn
   onConnect(handler: () => void): () => void
   onDisconnect(handler: () => void): () => void

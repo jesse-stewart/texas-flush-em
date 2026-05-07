@@ -6,14 +6,18 @@ export interface PlayerPresence {
   selectedPositions: number[] // which display positions (indices into handOrder) are raised
 }
 
-// Raw shape of a PRESENCE message received from the server
-export interface PresenceEvent {
+// Outbound: client → server. Wire format for "I'm rearranging cards / changing selection."
+export interface PresenceClientMessage {
   type: 'PRESENCE'
-  playerId: string
   handOrder: number[]
   selectedPositions: number[]
 }
 
-export function isPresenceEvent(event: { type: string }): event is PresenceEvent {
+// Inbound: server → client. The server tags the originating player and re-broadcasts.
+export interface PresenceServerEvent extends PresenceClientMessage {
+  playerId: string
+}
+
+export function isPresenceEvent(event: { type: string }): event is PresenceServerEvent {
   return event.type === 'PRESENCE'
 }

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Frame } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
-import { HandCategory } from '@shared/engine/hand-eval'
+import { handCategoryName } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
 import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
@@ -59,25 +59,6 @@ function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
       </AnimatePresence>
     </div>
   )
-}
-
-const CATEGORY_LABEL: Record<number, string> = {
-  [HandCategory.HIGH_CARD]: 'High Card',
-  [HandCategory.PAIR]: 'Pair',
-  [HandCategory.FLUSH_PAIR]: 'Flush Pair',
-  [HandCategory.TWO_PAIR]: 'Two Pair',
-  [HandCategory.FLUSH_TWO_PAIR]: 'Flush Two Pair',
-  [HandCategory.THREE_OF_A_KIND]: 'Three of a Kind',
-  [HandCategory.FLUSH_THREE_OF_A_KIND]: 'Flush Three of a Kind',
-  [HandCategory.STRAIGHT]: 'Straight',
-  [HandCategory.FLUSH]: 'Flush',
-  [HandCategory.FULL_HOUSE]: 'Full House',
-  [HandCategory.FLUSH_FULL_HOUSE]: 'Flush Full House',
-  [HandCategory.FOUR_OF_A_KIND]: 'Four of a Kind',
-  [HandCategory.FLUSH_FOUR_OF_A_KIND]: 'Flush Four of a Kind',
-  [HandCategory.STRAIGHT_FLUSH]: 'Straight Flush',
-  [HandCategory.FIVE_OF_A_KIND]: 'Five of a Kind',
-  [HandCategory.ROYAL_FLUSH]: 'Royal Flush',
 }
 
 interface TableCenterProps {
@@ -152,7 +133,7 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
                 style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}
               >
                 <span style={{ color: palette.black, fontSize: 13, fontWeight: 700 }}>
-                  {CATEGORY_LABEL[state.currentTopPlay!.category]}
+                  {handCategoryName(state.currentTopPlay!.category)}
                 </span>
                 <span style={{ color: palette.vdkGray, fontSize: 11 }}>by {topPlayer?.name ?? '?'}</span>
               </Frame>
