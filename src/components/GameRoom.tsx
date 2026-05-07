@@ -74,9 +74,17 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
 
   let content: React.ReactNode = (
     <CenterPanel title="Connecting...">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Icon name="network" size={32} label="Network" />
-        <p style={{ margin: 0, fontSize: 12 }}>Connecting to room {roomId}...</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Icon name="network" size={32} label="Network" />
+          <p style={{ margin: 0, fontSize: 12 }}>Connecting to room {roomId}...</p>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button onClick={onLeave}>
+            <Icon name="close" size={24} />
+            <span style={{ marginLeft: 8 }}>Cancel</span>
+          </Button>
+        </div>
       </div>
     </CenterPanel>
   )
