@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Frame, TitleBar, Fieldset } from '@react95/core'
-import { Button, Hourglass } from 'react95'
+import { Button, Hourglass, Table, TableBody, TableDataCell, TableHead, TableHeadCell, TableRow } from 'react95'
 import { palette } from '../palette'
 import { useGame } from '../hooks/useGame'
 import { WaitingRoom } from './Lobby/WaitingRoom'
@@ -8,6 +8,7 @@ import { GameScreen } from './GameScreen'
 import { SpectatorScreen } from './SpectatorScreen'
 import { EventLog } from './Game/EventLog'
 import { Icon } from './Icon/Icon'
+import { ChipStack } from './Chips/ChipStack'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameState } from '@shared/engine/game-state'
 import type { Card } from '@shared/engine/card'
@@ -25,14 +26,19 @@ interface GameRoomProps {
 export function GameRoom({ roomId, playerId, playerName, password, spectatorMode, onLeave, onAuthFailed }: GameRoomProps) {
   const { state, isConnected, connectionError, send, presence, debugState, requestDebugState } = useGame({ roomId, playerId, password })
 
-  useEffect(() => {
-    if (connectionError) onAuthFailed(connectionError.reason || 'rejected')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionError])
   const [debugOpen, setDebugOpen] = useState(false)
   const [roundModalDismissed, setRoundModalDismissed] = useState(false)
   const [spectating, setSpectating] = useState(false)
   const [connectingMinElapsed, setConnectingMinElapsed] = useState(false)
+
+  // Latest-callback ref so the connection-error effect can fire on `connectionError` alone
+  // without re-running every render when the parent passes a fresh `onAuthFailed` identity.
+  const onAuthFailedRef = useRef(onAuthFailed)
+  useEffect(() => { onAuthFailedRef.current = onAuthFailed })
+
+  useEffect(() => {
+    if (connectionError) onAuthFailedRef.current(connectionError.reason || 'rejected')
+  }, [connectionError])
 
   useEffect(() => {
     const t = setTimeout(() => setConnectingMinElapsed(true), 1000)
@@ -56,15 +62,13 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [requestDebugState])
 
   useEffect(() => {
     if (isConnected && !spectatorMode) {
       send({ type: 'JOIN', playerName })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected])
+  }, [isConnected, spectatorMode, playerName, send])
 
   function handleLeave() {
     if (!window.confirm('Leave the game? You will be eliminated and the game will continue without you.')) return
@@ -97,8 +101,12 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
     if (spectatorMode) {
       if (state.phase === 'lobby') {
         content = <SpectatorLobbyScreen state={state} roomId={roomId} onLeave={onLeave} />
+      } else if (state.phase === 'abandoned') {
+        content = <AbandonedScreen abandonedByName={state.abandonedByName} onLeave={onLeave} />
+      } else if (state.phase === 'game_end') {
+        content = <GameEndScreen state={state} myPlayerId={playerId} onLeave={onLeave} />
       } else {
-        content = <SpectatorScreen state={state} presence={presence} onLeave={onLeave} />
+        content = <SpectatorScreen state={state} presence={presence} onLeave={onLeave} roomId={roomId} password={password} />
       }
     } else if (state.phase === 'abandoned') {
       content = <AbandonedScreen abandonedByName={state.abandonedByName} onLeave={onLeave} />
@@ -120,15 +128,15 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
       )
     } else if (state.phase === 'playing') {
       content = isActiveParticipant
-        ? <GameScreen state={state} myPlayerId={playerId} roomId={roomId} send={send} presence={presence} onLeave={handleLeave} />
-        : <SpectatorScreen state={state} presence={presence} onLeave={onLeave} />
+        ? <GameScreen state={state} myPlayerId={playerId} roomId={roomId} password={password} send={send} presence={presence} onLeave={handleLeave} />
+        : <SpectatorScreen state={state} presence={presence} onLeave={onLeave} roomId={roomId} password={password} />
     } else if (state.phase === 'round_end') {
       if (spectating) {
-        content = <SpectatorScreen state={state} presence={presence} onLeave={handleLeave} eliminated />
+        content = <SpectatorScreen state={state} presence={presence} onLeave={handleLeave} eliminated roomId={roomId} password={password} />
       } else if (!roundModalDismissed) {
         content = (
           <div style={{ position: 'relative' }}>
-            <GameScreen state={state} myPlayerId={playerId} roomId={roomId} send={send} presence={presence} onLeave={handleLeave} />
+            <GameScreen state={state} myPlayerId={playerId} roomId={roomId} password={password} send={send} presence={presence} onLeave={handleLeave} />
             <RoundEndModal
               state={state}
               myPlayerId={playerId}
@@ -330,21 +338,20 @@ function RoundEndScreen({
           </h2>
 
           <Fieldset legend="Scores">
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', paddingBottom: 6, fontWeight: 700 }}></th>
-                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>before</th>
-                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>this round</th>
-                  <th style={{ textAlign: 'right', paddingBottom: 6, fontWeight: 700 }}>{totalLabel}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table style={{ width: '100%' }}>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell style={{ textAlign: 'left', fontWeight: 'normal' }}>player</TableHeadCell>
+                  <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>before</TableHeadCell>
+                  <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>this round</TableHeadCell>
+                  <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>{totalLabel}</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {sorted.map(p => {
                   const delta = state.roundScoreDelta[p.id] ?? 0
                   const total = state.scores[p.id] ?? 0
                   const before = isChips ? total - delta : total - delta
-                  const isMe = p.id === myPlayerId
                   const isRoundWinner = p.id === state.roundWinnerId
                   let deltaText = '-'
                   let deltaColor: string = palette.dkGray
@@ -357,8 +364,8 @@ function RoundEndScreen({
                   const isRequired = !p.isBot && !p.eliminated && p.isConnected
                   const ready = !!state.nextRoundReady[p.id]
                   return (
-                    <tr key={p.id} style={{ opacity: p.eliminated ? 0.5 : 1 }}>
-                      <td style={{ paddingTop: 4, fontWeight: isMe ? 700 : 400 }}>
+                    <TableRow key={p.id} style={{ opacity: p.eliminated ? 0.5 : 1 }}>
+                      <TableDataCell>
                         {p.name}
                         {p.eliminated && <span style={{ marginLeft: 6, color: palette.dkGray, fontSize: 11 }}>out</span>}
                         {isRequired && (
@@ -366,17 +373,24 @@ function RoundEndScreen({
                             ? <span style={{ marginLeft: 6, color: palette.win, fontSize: 11 }}>ready</span>
                             : <Hourglass size={16} style={{ marginLeft: 6, verticalAlign: 'middle' }} />
                         )}
-                      </td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', color: palette.dkGray }}>{isChips ? `$${before}` : before}</td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', color: deltaColor, fontWeight: 700 }}>
-                        {deltaText}
-                      </td>
-                      <td style={{ paddingTop: 4, textAlign: 'right', fontWeight: 700 }}>{isChips ? `$${total}` : total}</td>
-                    </tr>
+                      </TableDataCell>
+                      <TableDataCell style={{ textAlign: 'right', color: palette.dkGray }}>{isChips ? `$${before}` : before}</TableDataCell>
+                      <TableDataCell style={{ textAlign: 'right', color: deltaColor }}>
+                        <span style={{ position: 'relative', display: 'inline-block' }}>
+                          {isChips && isRoundWinner && delta > 0 && (
+                            <span style={{ position: 'absolute', right: '100%', bottom: -4, marginRight: 4 }}>
+                              <ChipStack count={delta} size={18} />
+                            </span>
+                          )}
+                          {deltaText}
+                        </span>
+                      </TableDataCell>
+                      <TableDataCell style={{ textAlign: 'right' }}>{isChips ? `$${total}` : total}</TableDataCell>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </Fieldset>
 
           {isEliminated && (
@@ -394,7 +408,7 @@ function RoundEndScreen({
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 12 }}>
             {canReady && !meReady && (
-              <Button onClick={onReady} style={{ minWidth: 160, fontWeight: 700 }}>Start next round</Button>
+              <Button onClick={onReady} style={{ minWidth: 160 }}>Start next round</Button>
             )}
             {canReady && meReady && waitingFor.length > 0 && (
               <span style={{ fontSize: 11, color: palette.vdkGray }}>
@@ -476,7 +490,7 @@ function DebugOverlay({ state, myPlayerId, onClose }: { state: GameState; myPlay
                 return (
                   <Frame key={id} bgColor="$material" boxShadow={isCurrent ? '$in' : '$out'} p="$4">
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontWeight: 700, fontSize: 12 }}>{p.name}</span>
+                      <span style={{fontSize: 12 }}>{p.name}</span>
                       {isMe && <span style={{ fontSize: 10, backgroundColor: palette.win, color: palette.white, padding: '0 4px' }}>you</span>}
                       {isCurrent && <span style={{ fontSize: 10, backgroundColor: palette.navy, color: palette.white, padding: '0 4px' }}>{state.turnPhase}</span>}
                       {p.folded && <span style={{ fontSize: 10, backgroundColor: palette.lose, color: palette.white, padding: '0 4px' }}>folded</span>}

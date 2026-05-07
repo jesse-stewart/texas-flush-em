@@ -2,8 +2,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Frame } from '@react95/core'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
-import { HandCategory } from '@shared/engine/hand-eval'
+import { handCategoryName } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
+import { CardStack } from '../Card/CardStack'
 import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
 
@@ -61,25 +62,6 @@ function PlayStack({ plays, myPlayerId, myLastPlaySlotIds }: PlayStackProps) {
   )
 }
 
-const CATEGORY_LABEL: Record<number, string> = {
-  [HandCategory.HIGH_CARD]: 'High Card',
-  [HandCategory.PAIR]: 'Pair',
-  [HandCategory.FLUSH_PAIR]: 'Flush Pair',
-  [HandCategory.TWO_PAIR]: 'Two Pair',
-  [HandCategory.FLUSH_TWO_PAIR]: 'Flush Two Pair',
-  [HandCategory.THREE_OF_A_KIND]: 'Three of a Kind',
-  [HandCategory.FLUSH_THREE_OF_A_KIND]: 'Flush Three of a Kind',
-  [HandCategory.STRAIGHT]: 'Straight',
-  [HandCategory.FLUSH]: 'Flush',
-  [HandCategory.FULL_HOUSE]: 'Full House',
-  [HandCategory.FLUSH_FULL_HOUSE]: 'Flush Full House',
-  [HandCategory.FOUR_OF_A_KIND]: 'Four of a Kind',
-  [HandCategory.FLUSH_FOUR_OF_A_KIND]: 'Flush Four of a Kind',
-  [HandCategory.STRAIGHT_FLUSH]: 'Straight Flush',
-  [HandCategory.FIVE_OF_A_KIND]: 'Five of a Kind',
-  [HandCategory.ROYAL_FLUSH]: 'Royal Flush',
-}
-
 interface TableCenterProps {
   state: ClientGameState
   myPlayerId: string
@@ -93,33 +75,26 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
 
   return (
     <div style={areaStyle}>
-      {/* Turn indicator — Win95 status panel */}
-      <Frame
-        bgColor="$material"
-        boxShadow="$in"
-        px="$6"
-        py="$1"
-        style={{ textAlign: 'center', minWidth: 280 }}
-      >
-        {isMyTurn
-          ? <span style={{ color: palette.lose, fontSize: 12, fontWeight: 700 }}>
-              Your turn - {
-                state.turnPhase === 'bet' ? 'place a bet, call, or fold'
-                : state.turnPhase === 'discard' ? 'select cards to discard, or skip'
-                : 'play a hand or fold'
-              }
-            </span>
-          : <span style={{ color: palette.black, fontSize: 12 }}>
-              {currentPlayer?.name ?? '...'}&apos;s turn
-            </span>
-        }
-      </Frame>
-
-      {state.turnPhase === 'bet' && state.betToMatch > 0 && (
-        <Frame bgColor="$material" boxShadow="$out" px="$4" py="$1" style={{ minWidth: 120, textAlign: 'center' }}>
-          <span style={{ fontSize: 11, color: palette.vdkGray }}>to call ${state.betToMatch}</span>
-        </Frame>
-      )}
+      <div style={turnStatusStyle}>
+        {isMyTurn ? (
+          <span style={{ color: palette.dealerYellow, fontWeight: 700, textShadow: '1px 1px 0 rgba(0,0,0,0.6)' }}>
+            Your turn — {
+              state.turnPhase === 'bet' ? 'place a bet, call, or fold'
+              : state.turnPhase === 'discard' ? 'select cards to discard, or skip'
+              : 'play a hand or fold'
+            }
+          </span>
+        ) : (
+          <span style={{ color: palette.white, textShadow: '1px 1px 0 rgba(0,0,0,0.6)' }}>
+            {currentPlayer?.name ?? '...'}&apos;s turn
+          </span>
+        )}
+        {state.turnPhase === 'bet' && state.betToMatch > 0 && (
+          <span style={{ color: palette.hintGood, fontWeight: 700, textShadow: '1px 1px 0 rgba(0,0,0,0.6)' }}>
+            · to call ${state.betToMatch}
+          </span>
+        )}
+      </div>
 
       <div style={tableRowStyle}>
         <div style={potAreaStyle}>
@@ -152,7 +127,7 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
                 style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}
               >
                 <span style={{ color: palette.black, fontSize: 13, fontWeight: 700 }}>
-                  {CATEGORY_LABEL[state.currentTopPlay!.category]}
+                  {handCategoryName(state.currentTopPlay!.category)}
                 </span>
                 <span style={{ color: palette.vdkGray, fontSize: 11 }}>by {topPlayer?.name ?? '?'}</span>
               </Frame>
@@ -163,13 +138,7 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
 
         <div style={middlePileAreaStyle}>
           {state.middlePileCount > 0 && (
-            <div style={middlePileStackStyle}>
-              {Array.from({ length: Math.min(state.middlePileCount, 3) }, (_, i) => (
-                <div key={i} style={{ position: 'absolute', top: i * 2, left: i * 2, zIndex: i }}>
-                  <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-                </div>
-              ))}
-            </div>
+            <CardStack count={state.middlePileCount} offset={2} />
           )}
         </div>
       </div>
@@ -185,6 +154,15 @@ const areaStyle: React.CSSProperties = {
   justifyContent: 'center',
   gap: 8,
   padding: '0 24px',
+}
+
+const turnStatusStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 6,
+  fontSize: 13,
+  textAlign: 'center',
+  letterSpacing: 0.2,
 }
 
 const tableRowStyle: React.CSSProperties = {
@@ -236,8 +214,3 @@ const middlePileAreaStyle: React.CSSProperties = {
   gap: 8,
 }
 
-const middlePileStackStyle: React.CSSProperties = {
-  position: 'relative',
-  width: 71,
-  height: 96,
-}

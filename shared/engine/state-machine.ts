@@ -408,7 +408,8 @@ function closeBettingRound(state: GameState): GameState {
 // Compute side-pot tiers from `committed`. Returns an array of { amount, eligiblePlayerIds },
 // ordered from main pot (smallest commitment tier) to highest. Folded players' chips contribute
 // to pots but they are never eligible to win.
-function computeSidePots(state: GameState): Array<{ amount: number; eligiblePlayerIds: string[] }> {
+// Exported for unit testing — production callers should use applyCommand, not this.
+export function computeSidePots(state: GameState): Array<{ amount: number; eligiblePlayerIds: string[] }> {
   // Distinct positive commitment amounts among non-folded players, ascending.
   const tiers = Array.from(
     new Set(
@@ -436,6 +437,22 @@ function computeSidePots(state: GameState): Array<{ amount: number; eligiblePlay
       pots.push({ amount, eligiblePlayerIds: eligible })
     }
     prev = tier
+  }
+
+  // Orphan chips: anything committed above the deepest non-folded tier comes from
+  // folded players exclusively (no non-folded player exceeds `highestTier` by definition).
+  // Without this, those chips vanish — the tier loop only iterates non-folded commit levels.
+  // Roll them into the top pot, which contains the deepest-stacked eligible player(s).
+  // No higher tier exists where eligible players could compete for them, so this is the
+  // only correct destination.
+  const highestTier = tiers.length > 0 ? tiers[tiers.length - 1] : 0
+  let orphan = 0
+  for (const p of state.players) {
+    const c = state.committed[p.id] ?? 0
+    if (c > highestTier) orphan += c - highestTier
+  }
+  if (orphan > 0 && pots.length > 0) {
+    pots[pots.length - 1].amount += orphan
   }
   return pots
 }
@@ -526,6 +543,27 @@ function removeCardsFromHand(hand: Card[], toRemove: Card[]): Card[] | null {
   return result
 }
 
+// Mark players eliminated when `shouldEliminate(p)` is true and produce the matching
+// 'eliminated' event for each player who newly transitioned. `clearCards` wipes deck
+// and hand at elimination time so spectator views stop rendering chips-out players' cards
+// (matches applyLeave's behavior — used in chips-mode hand end).
+function applyEliminations(
+  players: PlayerState[],
+  shouldEliminate: (p: PlayerState) => boolean,
+  options?: { clearCards?: boolean },
+): { players: PlayerState[]; events: EventInput[] } {
+  const updated = players.map(p => {
+    if (p.eliminated || !shouldEliminate(p)) return p
+    return options?.clearCards
+      ? { ...p, eliminated: true, hand: [], deck: [] }
+      : { ...p, eliminated: true }
+  })
+  const events: EventInput[] = updated
+    .filter(p => p.eliminated && !players.find(prev => prev.id === p.id)?.eliminated)
+    .map(p => ({ type: 'eliminated' as const, playerId: p.id }))
+  return { players: updated, events }
+}
+
 // Wrap up the current hand: award the pot, set aside played cards, reset folded/all-in,
 // set new lead. If betting is enabled, immediately post antes for the next hand.
 function endHand(
@@ -545,20 +583,12 @@ function endHand(
   // Chips mode: any player whose chips hit zero from this hand is eliminated. Without this,
   // they'd be carried into the next hand with $0 — startBettingRound would mark them folded
   // and the remaining player would just keep collecting their own ante forever.
-  // Newly-eliminated players' hand/deck are cleared so spectator views don't keep rendering
-  // their cards (matches applyLeave's behavior).
-  const eliminatePlayers = bettingEnabled(state)
-    ? players.map(p =>
-        !p.eliminated && (scores[p.id] ?? 0) <= 0
-          ? { ...p, eliminated: true, hand: [], deck: [] }
-          : p
-      )
-    : players
-  const newlyEliminated = eliminatePlayers
-    .filter(p => p.eliminated && !players.find(prev => prev.id === p.id)?.eliminated)
-    .map(p => ({ type: 'eliminated' as const, playerId: p.id }))
+  const elim = bettingEnabled(state)
+    ? applyEliminations(players, p => (scores[p.id] ?? 0) <= 0, { clearCards: true })
+    : { players, events: [] as EventInput[] }
+  const newlyEliminated = elim.events
 
-  const resetPlayers = eliminatePlayers.map(p => ({ ...p, folded: false, allIn: false }))
+  const resetPlayers = elim.players.map(p => ({ ...p, folded: false, allIn: false }))
 
   const sweptCards = state.currentTopPlay?.cards ?? []
 
@@ -669,26 +699,18 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
   // Apply elimination per mode.
   // Chips: a player with 0 chips is out. Points + eliminate: a player at/over threshold is out.
   // Points + end_game: nobody is eliminated mid-game; the whole game ends when threshold is hit.
-  let updatedPlayers = players
-  if (scoringMode === 'chips') {
-    updatedPlayers = players.map(p =>
-      !p.eliminated && (scores[p.id] ?? 0) <= 0 ? { ...p, eliminated: true } : p
-    )
-  } else if (pointsThresholdAction === 'eliminate') {
-    updatedPlayers = players.map(p =>
-      !p.eliminated && (scores[p.id] ?? 0) >= threshold ? { ...p, eliminated: true } : p
-    )
-  }
+  const elim = scoringMode === 'chips'
+    ? applyEliminations(players, p => (scores[p.id] ?? 0) <= 0)
+    : pointsThresholdAction === 'eliminate'
+      ? applyEliminations(players, p => (scores[p.id] ?? 0) >= threshold)
+      : { players, events: [] as EventInput[] }
+  const updatedPlayers = elim.players
+  const newlyEliminated = elim.events
 
   const thresholdHitInEndGameMode =
     scoringMode === 'points' &&
     pointsThresholdAction === 'end_game' &&
     Object.values(scores).some(s => s >= threshold)
-
-  // Newly eliminated this round → emit one 'eliminated' event each.
-  const newlyEliminated = updatedPlayers
-    .filter(p => p.eliminated && !players.find(prev => prev.id === p.id)?.eliminated)
-    .map(p => ({ type: 'eliminated' as const, playerId: p.id }))
 
   // Game-end conditions:
   //  - chips / points-eliminate: ≤1 non-eliminated player remains
@@ -999,9 +1021,14 @@ function applyPlay(
   const validation = validatePlay(state, cmd.playerId, cmd.cards)
   if (!validation.ok) return state
 
-  const evaluatedHand = evaluateHand(cmd.cards) as EvaluatedHand
+  // validatePlay already evaluated the hand and rejected if it didn't form a legal play,
+  // but recheck here so the type narrows naturally — and so a future validator change
+  // that decouples "ok" from "evaluable" doesn't crash this path.
+  const evaluatedHand = evaluateHand(cmd.cards)
+  if (!evaluatedHand) return state
 
-  const player = state.players.find(p => p.id === cmd.playerId)!
+  const player = state.players.find(p => p.id === cmd.playerId)
+  if (!player) return state
 
   // Remove played cards from hand
   const newHand = removeCardsFromHand(player.hand, cmd.cards)

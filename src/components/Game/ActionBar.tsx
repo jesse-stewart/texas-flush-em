@@ -3,28 +3,9 @@ import { Frame } from '@react95/core'
 import { Button, TextInput } from 'react95'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { Card } from '@shared/engine/card'
-import { evaluateHand, beats, HandCategory } from '@shared/engine/hand-eval'
+import { evaluateHand, beats, handCategoryName } from '@shared/engine/hand-eval'
 import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
-
-const CATEGORY_LABEL: Record<number, string> = {
-  [HandCategory.HIGH_CARD]: 'High Card',
-  [HandCategory.PAIR]: 'Pair',
-  [HandCategory.FLUSH_PAIR]: 'Flush Pair',
-  [HandCategory.TWO_PAIR]: 'Two Pair',
-  [HandCategory.FLUSH_TWO_PAIR]: 'Flush Two Pair',
-  [HandCategory.THREE_OF_A_KIND]: 'Three of a Kind',
-  [HandCategory.FLUSH_THREE_OF_A_KIND]: 'Flush Three of a Kind',
-  [HandCategory.STRAIGHT]: 'Straight',
-  [HandCategory.FLUSH]: 'Flush',
-  [HandCategory.FULL_HOUSE]: 'Full House',
-  [HandCategory.FLUSH_FULL_HOUSE]: 'Flush Full House',
-  [HandCategory.FOUR_OF_A_KIND]: 'Four of a Kind',
-  [HandCategory.FLUSH_FOUR_OF_A_KIND]: 'Flush Four of a Kind',
-  [HandCategory.STRAIGHT_FLUSH]: 'Straight Flush',
-  [HandCategory.FIVE_OF_A_KIND]: 'Five of a Kind',
-  [HandCategory.ROYAL_FLUSH]: 'Royal Flush',
-}
 
 interface ActionBarProps {
   state: ClientGameState
@@ -85,11 +66,11 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
       ? 'Not a valid hand - your deck is empty, keep selecting or fold'
       : 'Not a valid hand - keep selecting or discard instead'
   } else if (!doesBeat) {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} - doesn't beat the current play`
+    hint = `${handCategoryName(evaluated!.category)} - doesn't beat the current play`
   } else if (state.currentTopPlay === null) {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} - leads the hand`
+    hint = `${handCategoryName(evaluated!.category)} - leads the hand`
   } else {
-    hint = `${CATEGORY_LABEL[evaluated!.category]} - beats it`
+    hint = `${handCategoryName(evaluated!.category)} - beats it`
   }
 
   return (

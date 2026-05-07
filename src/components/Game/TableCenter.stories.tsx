@@ -2,13 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { LayoutGroup } from 'framer-motion'
 import { TableCenter } from './TableCenter'
 import { c, mockState, mockHandPlay } from '../../storybook/fixtures'
+import { palette } from '../../palette'
 
 const meta: Meta<typeof TableCenter> = {
   title: 'Game/TableCenter',
   component: TableCenter,
   parameters: {
     layout: 'fullscreen',
-    backgrounds: { default: 'felt', values: [{ name: 'felt', value: '#0f4c2a' }] },
+    backgrounds: { default: 'felt', values: [{ name: 'felt', value: palette.felt }] },
   },
   decorators: [
     Story => (
@@ -112,5 +113,47 @@ export const WithMiddlePile: Story = {
   },
   parameters: {
     docs: { description: { story: 'After several hands have completed, cards collect in the side pile.' } },
+  },
+}
+
+export const BettingPhaseWithPot: Story = {
+  args: {
+    state: mockState({
+      turnPhase: 'bet',
+      currentPlayerId: 'p1',
+      currentHandPlays: [],
+      currentTopPlay: null,
+      currentTopPlayerId: null,
+      pot: 30,
+      betToMatch: 10,
+      committed: { p1: 5, p2: 10 },
+      scores: { p1: 45, p2: 40 },
+    }),
+    myPlayerId: 'p1',
+    myLastPlaySlotIds: null,
+  },
+  parameters: {
+    docs: { description: { story: 'Betting phase, $30 in the pot, $10 to call. Pot chips render to the left of the play area; turn-status row shows the call amount.' } },
+  },
+}
+
+export const OpponentTurnWithPot: Story = {
+  args: {
+    state: (() => {
+      const top = mockHandPlay([c('K', 'hearts'), c('K', 'clubs')], 'p1')
+      return mockState({
+        turnPhase: 'play',
+        currentPlayerId: 'p2',
+        currentHandPlays: [top],
+        currentTopPlay: top.hand,
+        currentTopPlayerId: 'p1',
+        pot: 50,
+      })
+    })(),
+    myPlayerId: 'p1',
+    myLastPlaySlotIds: null,
+  },
+  parameters: {
+    docs: { description: { story: 'Opponent (Bob) is acting against my pair of Kings. Pot of $50 still showing on the side.' } },
   },
 }

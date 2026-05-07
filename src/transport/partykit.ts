@@ -6,7 +6,7 @@
 
 import PartySocket from 'partysocket'
 import type { ConnectionError, GameTransport, TransportOptions } from './GameTransport'
-import type { GameAction, GameEvent } from './types'
+import type { ClientMessage, GameEvent } from './types'
 
 export function createTransport(options: TransportOptions): GameTransport {
   let socket: PartySocket | null = null
@@ -25,7 +25,16 @@ export function createTransport(options: TransportOptions): GameTransport {
       })
 
       socket.addEventListener('message', (e) => {
-        const event = JSON.parse(e.data as string) as GameEvent
+        // The server controls both ends of this socket; if it sends garbage, it's a bug,
+        // not an attacker. Still, swallow parse errors so a single malformed frame doesn't
+        // tear down all event handlers.
+        let event: GameEvent
+        try {
+          event = JSON.parse(e.data as string) as GameEvent
+        } catch (err) {
+          console.error('[transport] malformed server message — dropping frame', err)
+          return
+        }
         eventHandlers.forEach(h => h(event))
       })
 
@@ -49,8 +58,8 @@ export function createTransport(options: TransportOptions): GameTransport {
       socket = null
     },
 
-    send(action: GameAction) {
-      socket?.send(JSON.stringify(action))
+    send(message: ClientMessage) {
+      socket?.send(JSON.stringify(message))
     },
 
     onEvent(handler) {

@@ -1,10 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { Card } from './Card'
+import { palette } from '../../palette'
 
 const meta: Meta<typeof Card> = {
   title: 'Components/Card',
   component: Card,
-  parameters: { layout: 'centered' },
+  parameters: {
+    layout: 'centered',
+    backgrounds: { default: 'felt', values: [{ name: 'felt', value: palette.felt }] },
+  },
   tags: ['autodocs'],
   argTypes: {
     onClick: { action: 'clicked' },

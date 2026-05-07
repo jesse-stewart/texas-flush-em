@@ -4,12 +4,13 @@
 // ============================================================
 
 import type * as Party from 'partykit/server'
-import type { GameAction, GameEvent } from '../src/transport/types'
+import type { GameEvent } from '../src/transport/types'
 import { applyCommand, buildClientState, initialState } from '../shared/engine/state-machine'
 import type { GameState } from '../shared/engine/game-state'
 import { DEFAULT_BOT_DIFFICULTY } from '../shared/engine/game-state'
 import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
 import { chooseBettingAction } from '../shared/engine/bot-betting'
+import { parseGameAction, parsePresenceMessage } from './validation'
 
 const BOT_THINK_DELAY_MS = 250     // pause before the bot starts computing, so UIs paint "thinking"
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
@@ -99,19 +100,31 @@ export default class GameParty implements Party.Server {
   }
 
   onMessage(message: string, sender: Party.Connection) {
-    // Parse raw first so we can intercept PRESENCE before narrowing to GameAction
-    const raw = JSON.parse(message) as { type: string } & Record<string, unknown>
+    let raw: unknown
+    try {
+      raw = JSON.parse(message)
+    } catch {
+      // Malformed frame — ignore. A real client would never send this.
+      return
+    }
 
-    // Relay presence (ephemeral UI state) to other clients — no state mutation
-    if (raw.type === 'PRESENCE') {
-      const relay = JSON.stringify({ type: 'PRESENCE', playerId: sender.id, handOrder: raw.handOrder, selectedPositions: raw.selectedPositions })
+    // Presence is a separate channel: relay-only, never reaches applyCommand.
+    const presence = parsePresenceMessage(raw)
+    if (presence) {
+      const relay = JSON.stringify({ type: 'PRESENCE', playerId: sender.id, handOrder: presence.handOrder, selectedPositions: presence.selectedPositions, bettingTarget: presence.bettingTarget })
       for (const conn of this.room.getConnections()) {
         if (conn.id !== sender.id) conn.send(relay)
       }
       return
     }
 
-    const action = raw as unknown as GameAction
+    const action = parseGameAction(raw)
+    if (!action) {
+      // Unknown or malformed action — drop it. Logged for dev visibility.
+      console.warn('[party] dropping invalid action:', (raw as { type?: unknown })?.type)
+      return
+    }
+
     switch (action.type) {
       case 'JOIN':
         this.state = applyCommand(this.state, {
@@ -213,15 +226,6 @@ export default class GameParty implements Party.Server {
       case 'DEBUG_FULL_STATE':
         if (process.env.NODE_ENV !== 'production') {
           this.sendTo(sender, { type: 'DEBUG_FULL_STATE', state: this.state })
-        }
-        return
-
-      case 'PRESENCE':
-        // Relay ephemeral UI state to all other clients — no game state mutation
-        for (const conn of this.room.getConnections()) {
-          if (conn.id !== sender.id) {
-            conn.send(JSON.stringify({ type: 'PRESENCE', playerId: sender.id, handOrder: action.handOrder, selectedPositions: action.selectedPositions }))
-          }
         }
         return
     }

@@ -30,11 +30,21 @@ interface DifficultyKnobs {
   bluffProb: number
 }
 
+// Tightened from the looser pre-2026-05 values: low thresholds plus pot-relative raise
+// sizing chained to all-in by the third raiser (4-bot STRAIGHT vs STRAIGHT could empty
+// every stack in one hand). Now FLUSH-and-up raises on medium, FULL_HOUSE+ on easy.
 const KNOBS: Record<BotDifficulty, DifficultyKnobs> = {
-  easy:   { callTightness: 0.7, raiseStrength: 0.85, bluffProb: 0 },
-  medium: { callTightness: 1.0, raiseStrength: 0.65, bluffProb: 0 },
-  hard:   { callTightness: 1.1, raiseStrength: 0.55, bluffProb: 0.05 },
+  easy:   { callTightness: 0.7, raiseStrength: 0.92, bluffProb: 0 },
+  medium: { callTightness: 1.0, raiseStrength: 0.85, bluffProb: 0 },
+  hard:   { callTightness: 1.1, raiseStrength: 0.75, bluffProb: 0.05 },
 }
+
+// Strength at or above which the bot is willing to commit its full stack on one action.
+// FLUSH_FULL_HOUSE (0.95) and up. Below this, a single bet/raise commits at most
+// `STACK_FRACTION_PER_ACTION` of the remaining stack — without this cap, pot-relative
+// raise sizing compounds across the round on shallow stacks.
+const SHOVE_STRENGTH = 0.95
+const STACK_FRACTION_PER_ACTION = 0.5
 
 // Hand strength in [0, 1] — calibrated to P(this category beats a random opponent's
 // best-of-10). A linear category/14 scale undervalues real hands (a STRAIGHT in this
@@ -87,9 +97,18 @@ export function chooseBettingAction(
   if (owe === 0) {
     // Strong hand → open the betting. Otherwise check.
     if (strength >= knobs.raiseStrength && stack >= state.options.anteAmount) {
-      // Bet a fraction of pot, sized by strength.
-      const target = state.betToMatch + Math.max(state.options.anteAmount, Math.floor(state.pot * strength))
-      return { type: 'BET', amount: Math.min(target, myCommitted + stack) }
+      // Sized as a fraction of the pot, tempered by strength. The `- 0.4` keeps
+      // moderate-strength opens (FLUSH ~0.85) at well under half-pot.
+      const target = state.betToMatch + Math.max(state.options.anteAmount, Math.floor(state.pot * (strength - 0.4)))
+      const stackCap = strength >= SHOVE_STRENGTH ? stack : Math.floor(stack * STACK_FRACTION_PER_ACTION)
+      const capped = Math.min(target, myCommitted + stackCap)
+      const isAllIn = capped === myCommitted + stack
+      const minLegalBet = state.betToMatch + state.options.anteAmount
+      // If the stack-cap forces the open below a legal bet (and we're not shoving),
+      // fall through to check rather than bet illegally.
+      if (capped >= minLegalBet || isAllIn) {
+        return { type: 'BET', amount: capped }
+      }
     }
     // Occasional bluff-bet on weak hands (hard only).
     if (knobs.bluffProb > 0 && Math.random() < knobs.bluffProb && stack >= state.options.anteAmount) {
@@ -104,8 +123,18 @@ export function chooseBettingAction(
 
   // Strength clearly above pot odds → consider a raise.
   if (strength >= knobs.raiseStrength && stack > owe) {
-    const raiseTo = state.betToMatch + Math.max(state.minRaise, Math.floor(state.pot * (strength - 0.4)))
-    return { type: 'RAISE', amount: Math.min(raiseTo, myCommitted + stack) }
+    // Smaller multiplier than BET because the pot is already inflated by prior action;
+    // pot-sized re-raises here are what compounded to all-in in shallow-stack hands.
+    const raiseTo = state.betToMatch + Math.max(state.minRaise, Math.floor(state.pot * (strength - 0.55)))
+    const stackCap = strength >= SHOVE_STRENGTH ? stack : Math.floor(stack * STACK_FRACTION_PER_ACTION)
+    const capped = Math.min(raiseTo, myCommitted + stackCap)
+    const isAllIn = capped === myCommitted + stack
+    const minLegalRaise = state.betToMatch + state.minRaise
+    // If the cap forces the raise below the legal min (and we're not shoving),
+    // fall through to the call/fold logic below.
+    if (capped >= minLegalRaise || isAllIn) {
+      return { type: 'RAISE', amount: capped }
+    }
   }
 
   // Strength meets pot odds → call.

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 // ← Swap this import to change transport (Socket.io, etc.) — nothing else changes
 import { createTransport } from '../transport/partykit'
 import type { ConnectionError, GameTransport } from '../transport/GameTransport'
-import type { ClientGameState, GameAction } from '../transport/types'
+import type { ClientGameState, ClientMessage } from '../transport/types'
 import { isPresenceEvent } from '../transport/presence'
 import type { PlayerPresence } from '../transport/presence'
 import type { GameState } from '@shared/engine/game-state'
@@ -19,7 +19,7 @@ interface UseGameReturn {
   state: ClientGameState | null
   isConnected: boolean
   connectionError: ConnectionError | null
-  send: (action: GameAction) => void
+  send: (message: ClientMessage) => void
   presence: Map<string, PlayerPresence>
   debugState: GameState | null
   requestDebugState: () => void
@@ -40,11 +40,10 @@ export function useGame({ roomId, playerId, password }: UseGameOptions): UseGame
     const unsubEvent = transport.onEvent((event) => {
       if (event.type === 'GAME_STATE') setState(event.state)
       if (event.type === 'DEBUG_FULL_STATE') setDebugState(event.state)
-      const raw = event as unknown as { type: string }
-      if (isPresenceEvent(raw)) {
+      if (isPresenceEvent(event)) {
         setPresence(prev => {
           const next = new Map(prev)
-          next.set(raw.playerId, { handOrder: raw.handOrder, selectedPositions: raw.selectedPositions })
+          next.set(event.playerId, { handOrder: event.handOrder, selectedPositions: event.selectedPositions, bettingTarget: event.bettingTarget })
           return next
         })
       }
@@ -64,13 +63,15 @@ export function useGame({ roomId, playerId, password }: UseGameOptions): UseGame
     }
   }, [roomId, playerId, password])
 
-  const send = (action: GameAction) => {
-    transportRef.current?.send(action)
-  }
+  // Memoized so consumers can include them in effect dep arrays without causing
+  // re-runs on every render. Both only read the ref, so an empty dep list is honest.
+  const send = useCallback((message: ClientMessage) => {
+    transportRef.current?.send(message)
+  }, [])
 
-  const requestDebugState = () => {
+  const requestDebugState = useCallback(() => {
     transportRef.current?.send({ type: 'DEBUG_FULL_STATE' })
-  }
+  }, [])
 
   return { state, isConnected, connectionError, send, presence, debugState, requestDebugState }
 }

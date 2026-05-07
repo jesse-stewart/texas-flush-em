@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { useState } from 'react'
 import { Hand } from './Hand'
 import { c } from '../../storybook/fixtures'
+import { palette } from '../../palette'
 import type { Card } from '@shared/engine/card'
 
 const meta: Meta<typeof Hand> = {
@@ -9,7 +10,7 @@ const meta: Meta<typeof Hand> = {
   component: Hand,
   parameters: {
     layout: 'centered',
-    backgrounds: { default: 'felt', values: [{ name: 'felt', value: '#0f4c2a' }] },
+    backgrounds: { default: 'felt', values: [{ name: 'felt', value: palette.felt }] },
   },
 }
 export default meta

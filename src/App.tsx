@@ -46,12 +46,22 @@ export default function App() {
   // If the URL points to a different room than the saved session, discard the
   // session so JoinScreen renders with the URL's room pre-filled. Otherwise the
   // old session would silently "win" and you'd never see the room you opened.
+  // A `?spectate=1` URL auto-creates a spectator session, bypassing JoinScreen.
   const [session, setSession] = useState<Session | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlRoom = params.get('room')?.toUpperCase()
+    const wantsSpectate = params.get('spectate') === '1'
     const saved = loadSession()
-    const urlRoom = new URLSearchParams(window.location.search).get('room')?.toUpperCase()
     if (urlRoom && saved && saved.roomId !== urlRoom) {
       localStorage.removeItem(SESSION_KEY)
       return null
+    }
+    if (urlRoom && wantsSpectate && !saved) {
+      const playerId = getOrCreatePlayerId()
+      const password = params.get('p') ?? undefined
+      const s: Session = { roomId: urlRoom, playerId, playerName: '', password, spectatorMode: true }
+      saveSession(s)
+      return s
     }
     return saved
   })

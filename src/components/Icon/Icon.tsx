@@ -2,9 +2,9 @@
 // them in ICON_COORDS — each entry is the (x, y) of the top-left pixel and the
 // native pixel size of the icon on the sheet.
 
-const SHEET_URL = '/cards.png'
-const SHEET_W = 923
-const SHEET_H = 576
+const SHEET_URL = '/icons_32_32.png'
+const SHEET_W = 64
+const SHEET_H = 64
 
 interface IconCoord {
   x: number
@@ -13,10 +13,10 @@ interface IconCoord {
 }
 
 const ICON_COORDS = {
-  printer: { x: 855, y: 480, size: 32 },
-  close:   { x: 887, y: 480, size: 32 },
-  app:     { x: 855, y: 512, size: 32 },
-  network: { x: 887, y: 512, size: 32 },
+  printer: { x: 0,  y: 0,  size: 32 },
+  close:   { x: 32, y: 0,  size: 32 },
+  app:     { x: 0,  y: 32, size: 32 },
+  network: { x: 32, y: 32, size: 32 },
 } as const
 
 export type IconName = keyof typeof ICON_COORDS

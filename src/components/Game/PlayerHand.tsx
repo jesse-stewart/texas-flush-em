@@ -3,6 +3,7 @@ import { Frame } from '@react95/core'
 import { Button } from 'react95'
 import type { Card as CardType } from '@shared/engine/card'
 import { Card } from '../Card/Card'
+import { CardStack } from '../Card/CardStack'
 import { Hand } from '../Hand/Hand'
 import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
@@ -17,7 +18,7 @@ interface PlayerHandProps {
   onReorder: (newOrder: CardType[]) => void
   onSortByRank: () => void
   onSortBySuit: () => void
-  disabled: boolean
+  disabled?: boolean
   deckSize: number
   discardingCards: DiscardingSlot[]
   isDealer?: boolean
@@ -29,7 +30,7 @@ interface PlayerHandProps {
 }
 
 export function PlayerHand({
-  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount, playerName, actionSlot,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled = false, deckSize, discardingCards, isDealer, chipCount, playerName, actionSlot,
 }: PlayerHandProps) {
   return (
     <Frame
@@ -82,32 +83,10 @@ export function PlayerHand({
 }
 
 function DeckStack({ count, discardingCards }: { count: number; discardingCards: DiscardingSlot[] }) {
-  const layers = Math.min(count, 6)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, alignSelf: 'flex-end', paddingBottom: 4 }}>
       <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{count} in deck</span>
-      <div style={{ position: 'relative', width: 71 + layers * 3, height: 96 + layers * 3 }}>
-        {count === 0 ? (
-          <div style={{
-            width: 71, height: 96,
-            border: `2px dashed ${palette.midGray}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ fontSize: 11, color: palette.ltGray }}>empty</span>
-          </div>
-        ) : (
-          Array.from({ length: layers }).map((_, i) => (
-            <div key={i} style={{
-              position: 'absolute',
-              left: i * 3,
-              top: (layers - 1 - i) * 2,
-              zIndex: i,
-            }}>
-              <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
-            </div>
-          ))
-        )}
-
+      <CardStack count={count} showEmpty>
         {discardingCards.map((slot, i) => (
           <motion.div
             key={slot.id}
@@ -118,7 +97,7 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
             <Card card={slot.card} />
           </motion.div>
         ))}
-      </div>
+      </CardStack>
     </div>
   )
 }

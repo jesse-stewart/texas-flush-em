@@ -1,4 +1,4 @@
-// Card-back catalog. Each cell on the sprite (cards.png) is 71x96 in source, but
+// Card-back catalog. Each cell on the sprite (cards_71_96.png) is 71x96 in source, but
 // every consumer scales the sprite to the rendered card size, so coordinates
 // here are simply (row, col) into the 13x6 grid.
 //
