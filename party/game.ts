@@ -11,7 +11,7 @@ import { DEFAULT_BOT_DIFFICULTY } from '../shared/engine/game-state'
 import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
 import { chooseBettingAction } from '../shared/engine/bot-betting'
 
-const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
+const BOT_THINK_DELAY_MS = 250     // pause before the bot starts computing, so UIs paint "thinking"
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
 
 // Connection close codes for client-surfaced auth failures (4xxx range = application-defined).
