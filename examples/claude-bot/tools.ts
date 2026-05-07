@@ -81,7 +81,8 @@ export const foldTool: Anthropic.Tool = {
   name: 'fold',
   description:
     'Fold this hand — you give up trying to play and will not lay any more cards in this hand. ' +
-    'Cards stay with you. Use when you cannot or do not want to beat the current top play.',
+    'Cards stay with you. Use when you cannot or do not want to beat the current top play. ' +
+    'Also valid during the betting phase (forfeits any chips you committed this hand).',
   input_schema: {
     type: 'object',
     properties: {
@@ -91,5 +92,67 @@ export const foldTool: Anthropic.Tool = {
       },
     },
     required: ['reasoning'],
+  },
+}
+
+// ============================================================
+// Betting tools — only relevant when state.turnPhase === 'bet' (chips mode + anteAmount > 0).
+// ============================================================
+
+export const checkTool: Anthropic.Tool = {
+  name: 'check',
+  description:
+    'Pass action without putting more chips in. Only legal when there is no outstanding bet to call (your committed chips already match betToMatch).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      reasoning: { type: 'string', description: 'Short note for the bot console.' },
+    },
+    required: ['reasoning'],
+  },
+}
+
+export const callTool: Anthropic.Tool = {
+  name: 'call',
+  description:
+    'Match the current betToMatch. Pays (betToMatch - your committed). Auto-converts to all-in if you do not have enough chips.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      reasoning: { type: 'string', description: 'Short note for the bot console.' },
+    },
+    required: ['reasoning'],
+  },
+}
+
+export const betTool: Anthropic.Tool = {
+  name: 'bet',
+  description:
+    'Open the betting. Only legal when nobody has bet beyond the ante yet. ' +
+    '`amount` is the TOTAL chips you will have committed this hand after the bet (poker "bet to $X" semantics). ' +
+    'Minimum target = betToMatch + anteAmount.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      amount: { type: 'number', description: 'Total committed target after the bet.' },
+      reasoning: { type: 'string', description: 'Short note for the bot console.' },
+    },
+    required: ['amount', 'reasoning'],
+  },
+}
+
+export const raiseTool: Anthropic.Tool = {
+  name: 'raise',
+  description:
+    'Raise the current bet. Only legal when someone has already bet (betToMatch > your committed). ' +
+    '`amount` is the TOTAL chips you will have committed this hand after the raise. ' +
+    'Minimum target = betToMatch + minRaise. Going all-in for less is also legal.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      amount: { type: 'number', description: 'Total committed target after the raise.' },
+      reasoning: { type: 'string', description: 'Short note for the bot console.' },
+    },
+    required: ['amount', 'reasoning'],
   },
 }

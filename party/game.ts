@@ -9,6 +9,7 @@ import { applyCommand, buildClientState, initialState } from '../shared/engine/s
 import type { GameState } from '../shared/engine/game-state'
 import { DEFAULT_BOT_DIFFICULTY } from '../shared/engine/game-state'
 import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
+import { chooseBettingAction } from '../shared/engine/bot-betting'
 
 const BOT_THINK_DELAY_MS = 800     // pause before the bot starts computing, so UIs paint "thinking"
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
@@ -157,6 +158,22 @@ export default class GameParty implements Party.Server {
         this.state = applyCommand(this.state, { type: 'READY_FOR_NEXT_ROUND', playerId: sender.id })
         break
 
+      case 'CHECK':
+        this.state = applyCommand(this.state, { type: 'CHECK', playerId: sender.id })
+        break
+
+      case 'BET':
+        this.state = applyCommand(this.state, { type: 'BET', playerId: sender.id, amount: action.amount })
+        break
+
+      case 'CALL':
+        this.state = applyCommand(this.state, { type: 'CALL', playerId: sender.id })
+        break
+
+      case 'RAISE':
+        this.state = applyCommand(this.state, { type: 'RAISE', playerId: sender.id, amount: action.amount })
+        break
+
       case 'DISCARD':
         this.state = applyCommand(this.state, {
           type: 'DISCARD',
@@ -184,6 +201,12 @@ export default class GameParty implements Party.Server {
       case 'DEBUG_SET_HAND':
         if (process.env.NODE_ENV !== 'production') {
           this.state = applyCommand(this.state, { type: 'DEBUG_SET_HAND', playerId: sender.id, count: action.count })
+        }
+        break
+
+      case 'DEBUG_ADJUST_CHIPS':
+        if (process.env.NODE_ENV !== 'production') {
+          this.state = applyCommand(this.state, { type: 'DEBUG_ADJUST_CHIPS', playerId: sender.id, delta: action.delta })
         }
         break
 
@@ -267,6 +290,21 @@ export default class GameParty implements Party.Server {
     if (!player || !player.isBot) return
 
     const difficulty = player.botDifficulty ?? DEFAULT_BOT_DIFFICULTY
+
+    // Betting phase: heuristic-based decision, no MCTS.
+    if (this.state.turnPhase === 'bet') {
+      const action = chooseBettingAction(this.state, botId, difficulty)
+      switch (action.type) {
+        case 'CHECK': this.state = applyCommand(this.state, { type: 'CHECK', playerId: botId }); break
+        case 'CALL':  this.state = applyCommand(this.state, { type: 'CALL', playerId: botId }); break
+        case 'BET':   this.state = applyCommand(this.state, { type: 'BET', playerId: botId, amount: action.amount }); break
+        case 'RAISE': this.state = applyCommand(this.state, { type: 'RAISE', playerId: botId, amount: action.amount }); break
+        case 'FOLD':  this.state = applyCommand(this.state, { type: 'FOLD', playerId: botId }); break
+      }
+      this.broadcastState()
+      return
+    }
+
     const decision = chooseBotMove(this.state, botId, presetForDifficulty(difficulty))
 
     // DISCARD then PLAY/FOLD — the state machine validates each step.

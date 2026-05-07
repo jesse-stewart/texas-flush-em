@@ -7,6 +7,7 @@ import type { GameOptions, DealMode, BotDifficulty } from '@shared/engine/game-s
 import { DEFAULT_OPTIONS, MIN_CARDS_PER_PLAYER, PERSONAL_MAX_CARDS, MIXED_DEFAULT_CARDS, MIN_CHIP_VALUE_PER_CARD, MAX_CHIP_VALUE_PER_CARD, DEFAULT_BOT_DIFFICULTY } from '@shared/engine/game-state'
 import { CardBackPicker } from '../CardBackPicker/CardBackPicker'
 import { CardBackVisual } from '../Card/Card'
+import { Icon } from '../Icon/Icon'
 import { useCardBackId } from '../../contexts/CardBackContext'
 import { getCardBack } from '../../cardBacks'
 import { palette } from '../../palette'
@@ -22,6 +23,7 @@ interface PersistedSettings {
   pointsTarget: number
   chipsStarting: number
   chipValuePerCard: number
+  anteAmount: number
   pointsThresholdAction: GameOptions['pointsThresholdAction']
   dealMode: DealMode
   personalCards: number
@@ -146,13 +148,14 @@ const BOT_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
 }
 
 const DEFAULT_POINTS_TARGET = 26
-const DEFAULT_CHIPS_STARTING = 78
+const DEFAULT_CHIPS_STARTING = 60
 
 const DEFAULT_SETTINGS: PersistedSettings = {
   scoringMode: DEFAULT_OPTIONS.scoringMode,
   pointsTarget: DEFAULT_POINTS_TARGET,
   chipsStarting: DEFAULT_CHIPS_STARTING,
   chipValuePerCard: DEFAULT_OPTIONS.chipValuePerCard,
+  anteAmount: DEFAULT_OPTIONS.anteAmount,
   pointsThresholdAction: DEFAULT_OPTIONS.pointsThresholdAction,
   dealMode: DEFAULT_OPTIONS.dealMode,
   personalCards: PERSONAL_MAX_CARDS,
@@ -160,7 +163,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   mixedCards: MIXED_DEFAULT_CARDS,
 }
 
-type PresetKey = 'quick' | 'classic' | 'long'
+type PresetKey = 'default' | 'quick' | 'classic' | 'long'
 
 interface Preset {
   key: PresetKey
@@ -171,6 +174,18 @@ interface Preset {
 }
 
 const PRESETS: Preset[] = [
+  {
+    key: 'default',
+    label: 'Default',
+    hint: 'Chips with $5 ante, classic deck.',
+    settings: {
+      scoringMode: 'chips',
+      chipsStarting: 60,
+      chipValuePerCard: 5,
+      anteAmount: 5,
+      dealMode: 'classic',
+    },
+  },
   {
     key: 'quick',
     label: 'Quick',
@@ -272,6 +287,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
   const [pointsTarget, setPointsTarget] = useState(initial.pointsTarget)
   const [chipsStarting, setChipsStarting] = useState(initial.chipsStarting)
   const [chipValuePerCard, setChipValuePerCard] = useState(initial.chipValuePerCard)
+  const [anteAmount, setAnteAmount] = useState(initial.anteAmount)
   const [pointsThresholdAction, setPointsThresholdAction] = useState<GameOptions['pointsThresholdAction']>(initial.pointsThresholdAction)
   const [dealMode, setDealMode] = useState<DealMode>(initial.dealMode)
   const [personalCards, setPersonalCards] = useState(initial.personalCards)
@@ -280,13 +296,13 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
 
   useEffect(() => {
     saveSettings({
-      scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction,
+      scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction,
       dealMode, personalCards, mixedDeckCount, mixedCards,
     })
-  }, [scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
+  }, [scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction, dealMode, personalCards, mixedDeckCount, mixedCards])
 
   const activePreset = detectActivePreset({
-    scoringMode, pointsTarget, chipsStarting, chipValuePerCard, pointsThresholdAction,
+    scoringMode, pointsTarget, chipsStarting, chipValuePerCard, anteAmount, pointsThresholdAction,
     dealMode, personalCards, mixedDeckCount, mixedCards,
   })
 
@@ -296,6 +312,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
     if (s.pointsTarget !== undefined) setPointsTarget(s.pointsTarget)
     if (s.chipsStarting !== undefined) setChipsStarting(s.chipsStarting)
     if (s.chipValuePerCard !== undefined) setChipValuePerCard(s.chipValuePerCard)
+    if (s.anteAmount !== undefined) setAnteAmount(s.anteAmount)
     if (s.pointsThresholdAction !== undefined) setPointsThresholdAction(s.pointsThresholdAction)
     if (s.dealMode !== undefined) setDealMode(s.dealMode)
     if (s.personalCards !== undefined) setPersonalCards(s.personalCards)
@@ -312,6 +329,9 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
     Math.ceil(52 / playerCount)
 
   const threshold = scoringMode === 'points' ? pointsTarget : chipsStarting
+  // Ante is chips-mode-only and clamped so a player can afford at least 2 hands at start.
+  const maxAnte = Math.max(0, Math.floor(chipsStarting / 2))
+  const effectiveAnte = scoringMode === 'chips' ? Math.max(0, Math.min(anteAmount, maxAnte)) : 0
   const options: GameOptions = {
     scoringMode,
     threshold,
@@ -320,6 +340,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
     dealMode,
     cardsPerPlayer: dealMode === 'personal' ? personalCards : effectiveMixedCards,
     mixedDeckCount,
+    anteAmount: effectiveAnte,
   }
   const botsCount = state.players.filter(p => p.isBot).length
   const humansCount = state.players.length - botsCount
@@ -365,6 +386,10 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
           ]}
         />
         <div style={{ padding: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+            <Icon name="app" size={48} label="Texas Flush'em" />
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Texas Flush&apos;em</span>
+          </div>
 
           <Tabs value={activeTab} onChange={(v) => setActiveTab(v as 'room' | 'settings')}>
             <Tab value="room">Room & Players</Tab>
@@ -519,6 +544,18 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
                       />
                     </SettingRow>
                   )}
+
+                  {scoringMode === 'chips' && (
+                    <SettingRow label="Ante (per hand)">
+                      <NumberStepper
+                        value={anteAmount}
+                        min={0}
+                        max={maxAnte}
+                        prefix="$"
+                        onChange={setAnteAmount}
+                      />
+                    </SettingRow>
+                  )}
                 </div>
               </Fieldset>
 
@@ -641,7 +678,7 @@ export function WaitingRoom({ state, roomId, password, myPlayerId, onStart, onLe
       </div>
 
       {pickerOpen && <CardBackPicker onClose={() => setPickerOpen(false)} />}
-      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} options={options} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
     </div>

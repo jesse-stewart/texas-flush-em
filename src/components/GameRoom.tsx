@@ -7,6 +7,7 @@ import { WaitingRoom } from './Lobby/WaitingRoom'
 import { GameScreen } from './GameScreen'
 import { SpectatorScreen } from './SpectatorScreen'
 import { EventLog } from './Game/EventLog'
+import { Icon } from './Icon/Icon'
 import type { ClientGameState } from '@shared/engine/state-machine'
 import type { GameState } from '@shared/engine/game-state'
 import type { Card } from '@shared/engine/card'
@@ -31,6 +32,12 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
   const [debugOpen, setDebugOpen] = useState(false)
   const [roundModalDismissed, setRoundModalDismissed] = useState(false)
   const [spectating, setSpectating] = useState(false)
+  const [connectingMinElapsed, setConnectingMinElapsed] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setConnectingMinElapsed(true), 1000)
+    return () => clearTimeout(t)
+  }, [])
 
   useEffect(() => {
     if (state?.phase === 'round_end') {
@@ -67,11 +74,14 @@ export function GameRoom({ roomId, playerId, playerName, password, spectatorMode
 
   let content: React.ReactNode = (
     <CenterPanel title="Connecting...">
-      <p style={{ margin: 0, fontSize: 12 }}>Connecting to room {roomId}...</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Icon name="network" size={32} label="Network" />
+        <p style={{ margin: 0, fontSize: 12 }}>Connecting to room {roomId}...</p>
+      </div>
     </CenterPanel>
   )
 
-  if (state) {
+  if (state && connectingMinElapsed) {
     const mePlayer = state.players.find(p => p.id === playerId)
     const isEliminated = mePlayer?.eliminated ?? false
     const isActiveParticipant = !!mePlayer && !isEliminated

@@ -1,6 +1,6 @@
 import type { Card } from './card'
 import { createDeck, createMultiDeck, shuffle, dealAll, drawFromTop, insertToBottom } from './deck'
-import { evaluateHand } from './hand-eval'
+import { evaluateHand, beats as handBeats } from './hand-eval'
 import type { EvaluatedHand } from './hand-eval'
 import { validatePlay, validateDiscard, scoreRound } from './rules'
 import type { GameState, GameOptions, PlayerState, HandPlay, BotDifficulty, GameEvent } from './game-state'
@@ -91,6 +91,10 @@ export type GameCommand =
   | { type: 'START_GAME'; options?: Partial<GameOptions> }
   | { type: 'NEXT_ROUND' }
   | { type: 'READY_FOR_NEXT_ROUND'; playerId: string }
+  | { type: 'CHECK'; playerId: string }
+  | { type: 'BET'; playerId: string; amount: number }
+  | { type: 'CALL'; playerId: string }
+  | { type: 'RAISE'; playerId: string; amount: number }
   | { type: 'DISCARD'; playerId: string; cards: Card[] }
   | { type: 'PLAY'; playerId: string; cards: Card[] }
   | { type: 'FOLD'; playerId: string }
@@ -98,6 +102,7 @@ export type GameCommand =
   | { type: 'RECONNECT'; playerId: string }
   | { type: 'DISCONNECT'; playerId: string }
   | { type: 'DEBUG_SET_HAND'; playerId: string; count: number }
+  | { type: 'DEBUG_ADJUST_CHIPS'; playerId: string; delta: number }
 
 // ============================================================
 // Client view — what each player sees (opponents' hands hidden)
@@ -122,7 +127,13 @@ export interface ClientGameState {
   players: PlayerView[]
   myHand: Card[]
   myDeckSize: number
-  turnPhase: 'discard' | 'play'
+  turnPhase: 'bet' | 'discard' | 'play'
+  // Betting view (only meaningful when betting is enabled).
+  pot: number
+  committed: Record<string, number>
+  betToMatch: number
+  minRaise: number
+  bettingActedSinceRaise: string[]
   currentTopPlay: EvaluatedHand | null
   currentTopPlayerId: string | null
   currentHandPlays: HandPlay[]
@@ -171,6 +182,11 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
     abandonedByName: state.abandonedByName,
     middlePileCount: state.middlePile.length,
     options: state.options,
+    pot: state.pot ?? 0,
+    committed: state.committed ?? {},
+    betToMatch: state.betToMatch ?? 0,
+    minRaise: state.minRaise ?? 0,
+    bettingActedSinceRaise: state.bettingActedSinceRaise ?? [],
     // Defaults guard against pre-schema persisted state surviving across engine upgrades.
     events: state.events ?? [],
     nextRoundReady: state.nextRoundReady ?? {},
@@ -194,6 +210,11 @@ export function initialState(): GameState {
     currentTopPlayerId: null,
     currentHandPlays: [],
     middlePile: [],
+    pot: 0,
+    committed: {},
+    betToMatch: 0,
+    minRaise: 0,
+    bettingActedSinceRaise: [],
     roundWinnerId: null,
     gameWinnerId: null,
     scores: {},
@@ -219,6 +240,10 @@ export function applyCommand(state: GameState, cmd: GameCommand): GameState {
     case 'START_GAME':  return applyStartGame(state, cmd)
     case 'NEXT_ROUND':  return applyNextRound(state)
     case 'READY_FOR_NEXT_ROUND': return applyReadyForNextRound(state, cmd)
+    case 'CHECK':       return applyCheck(state, cmd)
+    case 'BET':         return applyBet(state, cmd)
+    case 'CALL':        return applyCall(state, cmd)
+    case 'RAISE':       return applyRaise(state, cmd)
     case 'DISCARD':     return applyDiscard(state, cmd)
     case 'PLAY':        return applyPlay(state, cmd)
     case 'FOLD':        return applyFold(state, cmd)
@@ -226,7 +251,237 @@ export function applyCommand(state: GameState, cmd: GameCommand): GameState {
     case 'RECONNECT':        return applyReconnect(state, cmd)
     case 'DISCONNECT':       return applyDisconnect(state, cmd)
     case 'DEBUG_SET_HAND':   return applyDebugSetHand(state, cmd)
+    case 'DEBUG_ADJUST_CHIPS': return applyDebugAdjustChips(state, cmd)
   }
+}
+
+// ============================================================
+// Betting helpers
+// ============================================================
+
+// True when the current game has betting enabled (chips mode + non-zero ante).
+function bettingEnabled(state: GameState): boolean {
+  return state.options.scoringMode === 'chips' && state.options.anteAmount > 0
+}
+
+// Players still in the hand (not folded, not eliminated). All-in players are still "in" — they
+// just can't act in the betting round.
+function inHandPlayers(state: GameState): PlayerState[] {
+  return state.players.filter(p => !p.folded && !p.eliminated)
+}
+
+// Find the next player who can ACT in betting (not folded, not all-in, not eliminated),
+// scanning clockwise from `fromIndex` (exclusive).
+function nextBettorIndex(state: GameState, fromIndex: number): number {
+  const len = state.playerOrder.length
+  for (let i = 1; i <= len; i++) {
+    const idx = (fromIndex + i) % len
+    const p = state.players.find(pl => pl.id === state.playerOrder[idx])
+    if (p && !p.folded && !p.eliminated && !p.allIn) return idx
+  }
+  return fromIndex
+}
+
+// Collect antes from each in-hand player and seed the betting round. Returns the state
+// with antes posted and turnPhase = 'bet'. If only one player can play (everyone else
+// can't afford even a partial ante and gets nothing dealt? — for v1 we always post a partial
+// ante if a player has any chips at all, going all-in for whatever they have).
+function startBettingRound(state: GameState): GameState {
+  // Refuse to open a betting round with only one viable player. endHand normally catches this
+  // and transitions to game_end; this is a safety net so we never get stuck dealing antes to
+  // a lone survivor.
+  const viable = state.players.filter(p => !p.eliminated && (state.scores[p.id] ?? 0) > 0)
+  if (viable.length <= 1) {
+    const gameWinnerId = viable[0]?.id ?? null
+    return withEvents(
+      { ...state, phase: 'game_end', gameWinnerId },
+      ...(gameWinnerId ? [{ type: 'game_won' as const, playerId: gameWinnerId }] : []),
+    )
+  }
+
+  const ante = state.options.anteAmount
+  const scores = { ...state.scores }
+  const committed: Record<string, number> = {}
+  const events: EventInput[] = []
+  let pot = 0
+
+  let players = state.players.map(p => {
+    if (p.eliminated || p.folded) return p
+    const have = scores[p.id] ?? 0
+    if (have <= 0) {
+      // Already broke — should have been eliminated; keep them out of the hand.
+      return { ...p, folded: true, allIn: false }
+    }
+    const post = Math.min(ante, have)
+    scores[p.id] = have - post
+    committed[p.id] = post
+    pot += post
+    const allIn = scores[p.id] <= 0
+    events.push({ type: 'ante_posted', playerId: p.id, amount: post, allIn })
+    return { ...p, allIn }
+  })
+
+  // After antes, action starts left of the dealer (= leadPlayerIndex). Skip players who
+  // can't act (folded broke / all-in from a partial ante).
+  const startIdx = state.leadPlayerIndex
+  const startPlayer = players.find(p => p.id === state.playerOrder[startIdx])
+  let actorIndex = startIdx
+  if (!startPlayer || startPlayer.folded || startPlayer.eliminated || startPlayer.allIn) {
+    actorIndex = nextBettorIndex({ ...state, players }, startIdx)
+  }
+
+  // If nobody can act (all in-hand players are all-in from antes), skip betting entirely.
+  const canAct = players.some(p => !p.folded && !p.eliminated && !p.allIn)
+  if (!canAct) {
+    // No betting — proceed straight to discard.
+    return withEvents(
+      {
+        ...state,
+        players,
+        scores,
+        committed,
+        pot,
+        betToMatch: ante,
+        minRaise: ante,
+        bettingActedSinceRaise: [],
+        currentPlayerIndex: state.leadPlayerIndex,
+        turnPhase: 'discard',
+      },
+      ...events,
+    )
+  }
+
+  return withEvents(
+    {
+      ...state,
+      players,
+      scores,
+      committed,
+      pot,
+      betToMatch: ante,
+      minRaise: ante,
+      bettingActedSinceRaise: [],
+      currentPlayerIndex: actorIndex,
+      turnPhase: 'bet',
+    },
+    ...events,
+  )
+}
+
+// Decide whether the current betting round is complete: every non-folded, non-all-in player
+// has acted since the last bet/raise AND their committed === betToMatch.
+function bettingRoundComplete(state: GameState): boolean {
+  const live = inHandPlayers(state).filter(p => !p.allIn)
+  if (live.length === 0) return true
+  for (const p of live) {
+    if (!state.bettingActedSinceRaise.includes(p.id)) return false
+    if ((state.committed[p.id] ?? 0) !== state.betToMatch) return false
+  }
+  return true
+}
+
+// Close the betting round: transition to the discard phase for the player left of dealer.
+// If only one player remains in the hand (everyone else folded during betting), that player
+// wins the pot uncontested and we end the hand immediately.
+function closeBettingRound(state: GameState): GameState {
+  const inHand = inHandPlayers(state)
+  if (inHand.length <= 1) {
+    const winnerId = inHand[0]?.id ?? null
+    return endHand(state, state.players, winnerId)
+  }
+
+  // Move action to the player left of the dealer for the discard phase. Skip folded/eliminated.
+  // (All-in players still take discard/play turns — they just can't bet.)
+  let idx = state.leadPlayerIndex
+  const startPlayer = state.players.find(p => p.id === state.playerOrder[idx])
+  if (!startPlayer || startPlayer.folded || startPlayer.eliminated) {
+    idx = nextActiveIndex(state, idx)
+  }
+
+  return {
+    ...state,
+    currentPlayerIndex: idx,
+    turnPhase: 'discard',
+  }
+}
+
+// Compute side-pot tiers from `committed`. Returns an array of { amount, eligiblePlayerIds },
+// ordered from main pot (smallest commitment tier) to highest. Folded players' chips contribute
+// to pots but they are never eligible to win.
+function computeSidePots(state: GameState): Array<{ amount: number; eligiblePlayerIds: string[] }> {
+  // Distinct positive commitment amounts among non-folded players, ascending.
+  const tiers = Array.from(
+    new Set(
+      state.players
+        .filter(p => !p.folded && !p.eliminated)
+        .map(p => state.committed[p.id] ?? 0)
+        .filter(amt => amt > 0)
+    )
+  ).sort((a, b) => a - b)
+
+  const pots: Array<{ amount: number; eligiblePlayerIds: string[] }> = []
+  let prev = 0
+  for (const tier of tiers) {
+    let amount = 0
+    const eligible: string[] = []
+    for (const p of state.players) {
+      const c = state.committed[p.id] ?? 0
+      if (c <= prev) continue
+      // Every player who put in at least `tier` contributes (tier - prev) to this pot tier.
+      amount += Math.min(c, tier) - prev
+      // Only non-folded players are eligible to win.
+      if (!p.folded && !p.eliminated) eligible.push(p.id)
+    }
+    if (amount > 0 && eligible.length > 0) {
+      pots.push({ amount, eligiblePlayerIds: eligible })
+    }
+    prev = tier
+  }
+  return pots
+}
+
+// Award the pot(s) to the hand winner among eligible players for each tier. Used both at
+// normal hand end (where currentTopPlayerId / lone unfolded is the natural winner) and when
+// folds collapse the hand. Returns updated scores, delta map, and events.
+function awardPots(
+  state: GameState,
+  defaultWinnerId: string | null,
+): { scores: Record<string, number>; events: EventInput[] } {
+  const scores = { ...state.scores }
+  const events: EventInput[] = []
+  const pots = computeSidePots(state)
+
+  // For each pot tier, the "winner" is the eligible player with the best play in
+  // currentHandPlays. If nobody played (everyone folded before any play) or the natural
+  // hand-winner is eligible, use defaultWinnerId.
+  for (let i = 0; i < pots.length; i++) {
+    const pot = pots[i]
+    let winnerId: string | null = null
+
+    if (defaultWinnerId && pot.eligiblePlayerIds.includes(defaultWinnerId)) {
+      winnerId = defaultWinnerId
+    } else {
+      // Find best play among eligible players from currentHandPlays.
+      let bestPlay: HandPlay | null = null
+      for (const play of state.currentHandPlays) {
+        if (!pot.eligiblePlayerIds.includes(play.playerId)) continue
+        if (!bestPlay) { bestPlay = play; continue }
+        // higher hand wins; lib's `beats` from hand-eval would normally do this. Inline
+        // comparison via category index + tiebreakers via the existing beats() helper.
+        // Lazy: use the `beats` import.
+        if (handBeats(play.hand, bestPlay.hand)) bestPlay = play
+      }
+      if (bestPlay) winnerId = bestPlay.playerId
+      else if (pot.eligiblePlayerIds.length === 1) winnerId = pot.eligiblePlayerIds[0]
+    }
+
+    if (winnerId) {
+      scores[winnerId] = (scores[winnerId] ?? 0) + pot.amount
+      events.push({ type: 'pot_won', playerId: winnerId, amount: pot.amount, potIndex: i })
+    }
+  }
+
+  return { scores, events }
 }
 
 // ============================================================
@@ -268,23 +523,80 @@ function removeCardsFromHand(hand: Card[], toRemove: Card[]): Card[] | null {
   return result
 }
 
-// Wrap up the current hand: set aside played cards, reset folded, set new lead
+// Wrap up the current hand: award the pot, set aside played cards, reset folded/all-in,
+// set new lead. If betting is enabled, immediately post antes for the next hand.
 function endHand(
   state: GameState,
   players: PlayerState[],
   winnerId: string | null,
 ): GameState {
-  const resetPlayers = players.map(p => ({ ...p, folded: false }))
+  // Award the pot (if any) before resetting betting state.
+  let scores = state.scores
+  const potEvents: EventInput[] = []
+  if (bettingEnabled(state) && state.pot > 0) {
+    const result = awardPots({ ...state, players, scores }, winnerId)
+    scores = result.scores
+    potEvents.push(...result.events)
+  }
+
+  // Chips mode: any player whose chips hit zero from this hand is eliminated. Without this,
+  // they'd be carried into the next hand with $0 — startBettingRound would mark them folded
+  // and the remaining player would just keep collecting their own ante forever.
+  const eliminatePlayers = bettingEnabled(state)
+    ? players.map(p =>
+        !p.eliminated && (scores[p.id] ?? 0) <= 0 ? { ...p, eliminated: true } : p
+      )
+    : players
+  const newlyEliminated = eliminatePlayers
+    .filter(p => p.eliminated && !players.find(prev => prev.id === p.id)?.eliminated)
+    .map(p => ({ type: 'eliminated' as const, playerId: p.id }))
+
+  const resetPlayers = eliminatePlayers.map(p => ({ ...p, folded: false, allIn: false }))
+
+  const sweptCards = state.currentTopPlay?.cards ?? []
+
+  // If chip eliminations leave ≤1 non-eliminated player, the game is over — don't deal another hand.
+  const remaining = resetPlayers.filter(p => !p.eliminated)
+  if (bettingEnabled(state) && remaining.length <= 1) {
+    const gameWinnerId = remaining[0]?.id ?? null
+    const next: GameState = {
+      ...state,
+      players: resetPlayers,
+      scores,
+      pot: 0,
+      committed: {},
+      betToMatch: 0,
+      minRaise: 0,
+      bettingActedSinceRaise: [],
+      currentTopPlay: null,
+      currentTopPlayerId: null,
+      currentHandPlays: [],
+      phase: 'game_end',
+      gameWinnerId,
+      middlePile: [...state.middlePile, ...sweptCards],
+    }
+    return withEvents(
+      next,
+      ...potEvents,
+      ...(winnerId ? [{ type: 'hand_won' as const, playerId: winnerId }] : []),
+      ...newlyEliminated,
+      ...(gameWinnerId ? [{ type: 'game_won' as const, playerId: gameWinnerId }] : []),
+    )
+  }
 
   const newLeadIndex = winnerId !== null
     ? state.playerOrder.indexOf(winnerId)
     : (state.leadPlayerIndex + 1) % state.playerOrder.length
 
-  const sweptCards = state.currentTopPlay?.cards ?? []
-
   const next: GameState = {
     ...state,
     players: resetPlayers,
+    scores,
+    pot: 0,
+    committed: {},
+    betToMatch: 0,
+    minRaise: 0,
+    bettingActedSinceRaise: [],
     currentTopPlay: null,
     currentTopPlayerId: null,
     currentHandPlays: [],
@@ -293,10 +605,25 @@ function endHand(
     turnPhase: 'discard',
     middlePile: [...state.middlePile, ...sweptCards],
   }
-  return winnerId ? withEvents(next, { type: 'hand_won', playerId: winnerId }) : next
+  const withEv = withEvents(
+    next,
+    ...potEvents,
+    ...(winnerId ? [{ type: 'hand_won' as const, playerId: winnerId }] : []),
+    ...newlyEliminated,
+  )
+  return bettingEnabled(withEv) ? startBettingRound(withEv) : withEv
 }
 
 function endRound(state: GameState, players: PlayerState[], winnerId: string): GameState {
+  // First, award any outstanding hand pot (the round-ender just won the hand and the pot).
+  let preScores = state.scores
+  const potEvents: EventInput[] = []
+  if (bettingEnabled(state) && state.pot > 0) {
+    const result = awardPots({ ...state, players, scores: preScores }, winnerId)
+    preScores = result.scores
+    potEvents.push(...result.events)
+  }
+
   // Raw per-loser amount: cards remaining in hand, capped at 10. Winner = 0.
   // Already-eliminated players contribute 0 (they aren't playing).
   const lossPerPlayer = scoreRound(state, winnerId)
@@ -304,7 +631,7 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
 
   // delta: signed change applied to scores this round (semantics differ by mode).
   const delta: Record<string, number> = {}
-  const scores: Record<string, number> = { ...state.scores }
+  const scores: Record<string, number> = { ...preScores }
 
   if (scoringMode === 'chips') {
     // Losers pay chips equal to (cards remaining × per-card value); winner takes the pot.
@@ -383,9 +710,15 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
       gameWinnerId,
       scores,
       roundScoreDelta: delta,
+      pot: 0,
+      committed: {},
+      betToMatch: 0,
+      minRaise: 0,
+      bettingActedSinceRaise: [],
     }
     return withEvents(
       next,
+      ...potEvents,
       { type: 'round_won', playerId: winnerId, emptied: true },
       ...newlyEliminated,
       ...(gameWinnerId ? [{ type: 'game_won' as const, playerId: gameWinnerId }] : []),
@@ -399,9 +732,15 @@ function endRound(state: GameState, players: PlayerState[], winnerId: string): G
     roundWinnerId: winnerId,
     scores,
     roundScoreDelta: delta,
+    pot: 0,
+    committed: {},
+    betToMatch: 0,
+    minRaise: 0,
+    bettingActedSinceRaise: [],
   }
   return withEvents(
     next,
+    ...potEvents,
     { type: 'round_won', playerId: winnerId, emptied: true },
     ...newlyEliminated,
   )
@@ -440,6 +779,7 @@ function applyAddPlayer(
     isBot,
     isApi,
     botDifficulty: isBot ? (difficulty ?? DEFAULT_BOT_DIFFICULTY) : undefined,
+    allIn: false,
   }
 
   return withEvents(
@@ -503,7 +843,7 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
   const firstPlayerIndex = (dealerIndex + 1) % playerOrder.length
   const dealerId = playerOrder[dealerIndex]
 
-  return withEvents(
+  const started = withEvents(
     {
       ...state,
       phase: 'playing',
@@ -517,6 +857,11 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
       currentTopPlayerId: null,
       currentHandPlays: [],
       middlePile: [],
+      pot: 0,
+      committed: {},
+      betToMatch: 0,
+      minRaise: 0,
+      bettingActedSinceRaise: [],
       roundWinnerId: null,
       scores,
       roundScoreDelta: {},
@@ -526,6 +871,7 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
     },
     { type: 'game_started' },
   )
+  return bettingEnabled(started) ? startBettingRound(started) : started
 }
 
 // Mark a player as ready for the next round. When every connected, non-eliminated
@@ -556,7 +902,7 @@ function applyNextRound(state: GameState): GameState {
 
   const updatedActive = activePlayers.map((p, i) => {
     const { drawn, remaining } = drawFromTop(piles[i], 10)
-    return { ...p, deck: remaining, hand: drawn, folded: false }
+    return { ...p, deck: remaining, hand: drawn, folded: false, allIn: false }
   })
 
   const players = state.players.map(p => {
@@ -574,7 +920,7 @@ function applyNextRound(state: GameState): GameState {
     ? 0
     : (newDealerIndex + 1) % newPlayerOrder.length
 
-  return withEvents(
+  const started = withEvents(
     {
       ...state,
       phase: 'playing',
@@ -588,6 +934,11 @@ function applyNextRound(state: GameState): GameState {
       currentTopPlayerId: null,
       currentHandPlays: [],
       middlePile: [],
+      pot: 0,
+      committed: {},
+      betToMatch: 0,
+      minRaise: 0,
+      bettingActedSinceRaise: [],
       roundWinnerId: null,
       // Personal mode's effective deck count tracks playerCount, which can shrink after eliminations.
       deckCount: effectiveDeckCount(state.options, activePlayers.length),
@@ -595,6 +946,7 @@ function applyNextRound(state: GameState): GameState {
     },
     { type: 'round_started' },
   )
+  return bettingEnabled(started) ? startBettingRound(started) : started
 }
 
 function applyDiscard(
@@ -699,10 +1051,13 @@ function applyPlay(
 function applyFold(state: GameState, cmd: { playerId: string }): GameState {
   if (state.phase !== 'playing') return state
   if (state.playerOrder[state.currentPlayerIndex] !== cmd.playerId) return state
-  if (state.turnPhase !== 'play') return state
+  if (state.turnPhase !== 'play' && state.turnPhase !== 'bet') return state
 
   const player = state.players.find(p => p.id === cmd.playerId)
   if (!player) return state
+  // An all-in player has fully committed to the pot — they have no decision left and
+  // can't surrender chips they no longer have. Reject the fold so they can't throw the showdown.
+  if (player.allIn) return state
 
   const players = state.players.map(p => p.id === cmd.playerId ? { ...p, folded: true } : p)
   // Eliminated players keep folded=false across rounds (they're not "in" the hand),
@@ -713,8 +1068,22 @@ function applyFold(state: GameState, cmd: { playerId: string }): GameState {
 
   // Hand ends when ≤1 player remains un-folded
   if (active.length <= 1) {
-    // Winner is whoever made the last play; null if no play was made this hand
-    return endHand(withEvents({ ...state, players }, foldedEvent), players, state.currentTopPlayerId)
+    // Winner is whoever made the last play; null if no play was made this hand.
+    // During betting, that means the lone non-folded player wins the pot uncontested.
+    const winnerId = state.turnPhase === 'bet'
+      ? (active[0]?.id ?? null)
+      : state.currentTopPlayerId
+    return endHand(withEvents({ ...state, players }, foldedEvent), players, winnerId)
+  }
+
+  // During the betting phase, advance to the next bettor and check round completion.
+  if (state.turnPhase === 'bet') {
+    const next: GameState = { ...state, players }
+    if (bettingRoundComplete(next)) {
+      return closeBettingRound(withEvents(next, foldedEvent))
+    }
+    const nextIdx = nextBettorIndex(next, state.currentPlayerIndex)
+    return withEvents({ ...next, currentPlayerIndex: nextIdx }, foldedEvent)
   }
 
   // Continue to next active player
@@ -738,6 +1107,14 @@ function applyDebugSetHand(state: GameState, cmd: { playerId: string; count: num
   const newHand = kept.slice(0, 10)
   const newDeck = kept.slice(10)
   return updatePlayer(state, { ...player, hand: newHand, deck: newDeck })
+}
+
+function applyDebugAdjustChips(state: GameState, cmd: { playerId: string; delta: number }): GameState {
+  const player = state.players.find(p => p.id === cmd.playerId)
+  if (!player) return state
+  const current = state.scores[cmd.playerId] ?? 0
+  const next = Math.max(0, current + cmd.delta)
+  return { ...state, scores: { ...state.scores, [cmd.playerId]: next } }
 }
 
 function applyLeave(state: GameState, cmd: { playerId: string }): GameState {
@@ -846,4 +1223,161 @@ function applyDisconnect(state: GameState, cmd: { playerId: string }): GameState
   const player = state.players.find(p => p.id === cmd.playerId)
   if (!player || player.isBot) return state
   return updatePlayer(state, { ...player, connected: false })
+}
+
+// ============================================================
+// Betting handlers (chips mode + anteAmount > 0 only)
+// ============================================================
+
+// Common preconditions for any betting action by `playerId`.
+function bettingPreconditions(state: GameState, playerId: string): PlayerState | null {
+  if (state.phase !== 'playing') return null
+  if (state.turnPhase !== 'bet') return null
+  if (state.playerOrder[state.currentPlayerIndex] !== playerId) return null
+  const player = state.players.find(p => p.id === playerId)
+  if (!player) return null
+  if (player.folded || player.eliminated || player.allIn) return null
+  return player
+}
+
+// Common tail for CHECK / CALL: advance to next bettor or close round if everyone's matched.
+function advanceAfterCheckOrCall(state: GameState, actorId: string): GameState {
+  const acted = state.bettingActedSinceRaise.includes(actorId)
+    ? state.bettingActedSinceRaise
+    : [...state.bettingActedSinceRaise, actorId]
+  const next: GameState = { ...state, bettingActedSinceRaise: acted }
+  if (bettingRoundComplete(next)) return closeBettingRound(next)
+  const nextIdx = nextBettorIndex(next, state.currentPlayerIndex)
+  return { ...next, currentPlayerIndex: nextIdx }
+}
+
+function applyCheck(state: GameState, cmd: { playerId: string }): GameState {
+  const player = bettingPreconditions(state, cmd.playerId)
+  if (!player) return state
+  // Check is only legal when no outstanding bet to call.
+  if ((state.committed[cmd.playerId] ?? 0) !== state.betToMatch) return state
+  return advanceAfterCheckOrCall(
+    withEvents(state, { type: 'checked', playerId: cmd.playerId }),
+    cmd.playerId,
+  )
+}
+
+function applyBet(state: GameState, cmd: { playerId: string; amount: number }): GameState {
+  const player = bettingPreconditions(state, cmd.playerId)
+  if (!player) return state
+  // BET only legal when nobody has bet beyond the ante level (committed[me] === betToMatch).
+  if ((state.committed[cmd.playerId] ?? 0) !== state.betToMatch) return state
+
+  const stack = state.scores[cmd.playerId] ?? 0
+  if (stack <= 0) return state
+
+  const myCommitted = state.committed[cmd.playerId] ?? 0
+  // amount = TOTAL chips this player will have committed after the bet (matches poker UI "bet to $X").
+  // Cap at all-in.
+  const target = Math.min(cmd.amount, myCommitted + stack)
+  const increment = target - myCommitted
+  if (increment <= 0) return state
+
+  // Min bet: must raise the bet-to-match by at least one ante (unless going all-in).
+  const minTarget = state.betToMatch + state.options.anteAmount
+  const allIn = increment === stack
+  if (target < minTarget && !allIn) return state
+
+  const newScores = { ...state.scores, [cmd.playerId]: stack - increment }
+  const newCommitted = { ...state.committed, [cmd.playerId]: target }
+  const newPlayers = allIn
+    ? state.players.map(p => p.id === cmd.playerId ? { ...p, allIn: true } : p)
+    : state.players
+
+  const next: GameState = {
+    ...state,
+    players: newPlayers,
+    scores: newScores,
+    committed: newCommitted,
+    pot: state.pot + increment,
+    betToMatch: target,
+    minRaise: target - state.betToMatch,
+    bettingActedSinceRaise: [cmd.playerId],
+  }
+  const withEv = withEvents(next, { type: 'bet', playerId: cmd.playerId, amount: increment, allIn })
+  if (bettingRoundComplete(withEv)) return closeBettingRound(withEv)
+  return { ...withEv, currentPlayerIndex: nextBettorIndex(withEv, state.currentPlayerIndex) }
+}
+
+function applyCall(state: GameState, cmd: { playerId: string }): GameState {
+  const player = bettingPreconditions(state, cmd.playerId)
+  if (!player) return state
+  const myCommitted = state.committed[cmd.playerId] ?? 0
+  // Nothing to call.
+  if (myCommitted >= state.betToMatch) return state
+
+  const stack = state.scores[cmd.playerId] ?? 0
+  if (stack <= 0) return state
+
+  const owe = state.betToMatch - myCommitted
+  const pay = Math.min(owe, stack)
+  const allIn = pay === stack && pay < owe
+  // Even if not capped by stack, going to zero chips counts as all-in.
+  const becomesAllIn = allIn || (stack - pay <= 0)
+
+  const newScores = { ...state.scores, [cmd.playerId]: stack - pay }
+  const newCommitted = { ...state.committed, [cmd.playerId]: myCommitted + pay }
+  const newPlayers = becomesAllIn
+    ? state.players.map(p => p.id === cmd.playerId ? { ...p, allIn: true } : p)
+    : state.players
+
+  const next: GameState = {
+    ...state,
+    players: newPlayers,
+    scores: newScores,
+    committed: newCommitted,
+    pot: state.pot + pay,
+  }
+  return advanceAfterCheckOrCall(
+    withEvents(next, { type: 'called', playerId: cmd.playerId, amount: pay, allIn: becomesAllIn }),
+    cmd.playerId,
+  )
+}
+
+function applyRaise(state: GameState, cmd: { playerId: string; amount: number }): GameState {
+  const player = bettingPreconditions(state, cmd.playerId)
+  if (!player) return state
+  const myCommitted = state.committed[cmd.playerId] ?? 0
+  // RAISE only legal when there's a bet to raise (committed[me] < betToMatch).
+  if (myCommitted >= state.betToMatch) return state
+
+  const stack = state.scores[cmd.playerId] ?? 0
+  if (stack <= 0) return state
+
+  // amount = TOTAL chips this player will have committed after the raise.
+  const target = Math.min(cmd.amount, myCommitted + stack)
+  const increment = target - myCommitted
+  if (increment <= 0) return state
+
+  // Must at least call.
+  if (target < state.betToMatch) return state
+
+  const allIn = increment === stack
+  const minTarget = state.betToMatch + state.minRaise
+  if (target < minTarget && !allIn) return state
+
+  const newScores = { ...state.scores, [cmd.playerId]: stack - increment }
+  const newCommitted = { ...state.committed, [cmd.playerId]: target }
+  const newPlayers = allIn
+    ? state.players.map(p => p.id === cmd.playerId ? { ...p, allIn: true } : p)
+    : state.players
+
+  const next: GameState = {
+    ...state,
+    players: newPlayers,
+    scores: newScores,
+    committed: newCommitted,
+    pot: state.pot + increment,
+    betToMatch: target,
+    minRaise: target - state.betToMatch,
+    bettingActedSinceRaise: [cmd.playerId],
+  }
+  const withEv = withEvents(next, { type: 'raised', playerId: cmd.playerId, to: target, allIn })
+  if (bettingRoundComplete(withEv)) return closeBettingRound(withEv)
+  return { ...withEv, currentPlayerIndex: nextBettorIndex(withEv, state.currentPlayerIndex) }
 }

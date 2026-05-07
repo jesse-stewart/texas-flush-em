@@ -57,6 +57,13 @@ export interface Bot {
   discard(cards: Card[]): void
   play(cards: Card[]): void
   fold(): void
+  // Betting actions (chips mode + anteAmount > 0). Only legal during turnPhase === 'bet'.
+  // `amount` for bet/raise is the TOTAL chips the player will have committed this hand
+  // after the action (poker "bet/raise to $X" semantics).
+  check(): void
+  bet(amount: number): void
+  call(): void
+  raise(amount: number): void
   leave(): void
   readyForNextRound(): void
 
@@ -140,6 +147,10 @@ export function createBot(config: BotConfig): Bot {
     discard(cards) { send({ type: 'DISCARD', cards }) },
     play(cards) { send({ type: 'PLAY', cards }) },
     fold() { send({ type: 'FOLD' }) },
+    check() { send({ type: 'CHECK' }) },
+    bet(amount) { send({ type: 'BET', amount }) },
+    call() { send({ type: 'CALL' }) },
+    raise(amount) { send({ type: 'RAISE', amount }) },
     leave() { send({ type: 'LEAVE' }) },
     readyForNextRound() { send({ type: 'READY_FOR_NEXT_ROUND' }) },
     addBot(difficulty) { send({ type: 'ADD_BOT', difficulty }) },
@@ -155,7 +166,7 @@ export function createBot(config: BotConfig): Bot {
 }
 
 // Convenience: returns true when it's this bot's turn in the given phase.
-export function isMyTurn(state: ClientGameState, playerId: string, phase?: 'discard' | 'play'): boolean {
+export function isMyTurn(state: ClientGameState, playerId: string, phase?: 'bet' | 'discard' | 'play'): boolean {
   if (state.currentPlayerId !== playerId) return false
   if (phase && state.turnPhase !== phase) return false
   return true

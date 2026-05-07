@@ -18,7 +18,7 @@ const ORIGIN_Y = 480
 const SCALE = 1
 const CHIP_W = NATIVE_CHIP * SCALE
 const CHIP_H = NATIVE_CHIP * SCALE
-const SLICE = 8 * SCALE
+const SLICE = 6 * SCALE
 const MAX_VISIBLE = 10
 
 // Cluster layout:

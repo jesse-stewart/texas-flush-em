@@ -80,12 +80,15 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         }}
       >
         <span style={{ fontWeight: 700 }}>Spectating</span>
-        {state.players.map(p => (
-          <span key={p.id}>
-            {p.name}: {state.scores[p.id] ?? 0}
-            {state.options.scoringMode === 'points' && `/${state.options.threshold}`}
-          </span>
-        ))}
+        {state.players.map(p => {
+          const score = state.scores[p.id] ?? 0
+          const isChips = state.options.scoringMode === 'chips'
+          return (
+            <span key={p.id}>
+              {p.name}: {isChips ? `$${score}` : `${score}/${state.options.threshold}`}
+            </span>
+          )
+        })}
         <span style={{ marginLeft: 'auto' }}>
           <Button onClick={onLeave} style={{ minWidth: 60 }}>Leave</Button>
         </span>
@@ -122,7 +125,7 @@ export function SpectatorScreen({ state, presence, onLeave, eliminated }: Specta
         </div>
       </Frame>
 
-      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} options={state.options} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}

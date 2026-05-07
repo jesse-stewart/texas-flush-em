@@ -23,10 +23,13 @@ interface PlayerHandProps {
   isDealer?: boolean
   chipCount?: number | null
   playerName?: string
+  // Optional element rendered between hand/deck info (left) and sort buttons (right)
+  // in the top toolbar — used to inline the ActionBar so buttons sit on one row.
+  actionSlot?: React.ReactNode
 }
 
 export function PlayerHand({
-  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount, playerName,
+  cards, ids, selectedIndices, onToggle, onReorder, onSortByRank, onSortBySuit, disabled, deckSize, discardingCards, isDealer, chipCount, playerName, actionSlot,
 }: PlayerHandProps) {
   return (
     <Frame
@@ -42,23 +45,14 @@ export function PlayerHand({
       }}
     >
       <div style={toolbarStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span style={{ fontWeight: 700, color: palette.white }}>hand</span>
-          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: palette.black }}>
-            {cards.length}
-          </Frame>
-          <span style={{ fontWeight: 700, color: palette.white }}>deck</span>
-          <Frame bgColor="$inputBackground" boxShadow="$in" px="$2" py="$1" style={{ minWidth: 24, textAlign: 'center', fontFamily: 'monospace', color: palette.black }}>
-            {deckSize}
-          </Frame>
-          {isDealer && (
-            <span style={dealerBadgeStyle} title="You are the dealer this round">D</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <Button onClick={onSortByRank}>Sort by rank</Button>
-          <Button onClick={onSortBySuit}>Sort by suit</Button>
-        </div>
+        {isDealer && (
+          <span style={dealerBadgeStyle} title="You are the dealer this round">D</span>
+        )}
+        {actionSlot != null && (
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+            {actionSlot}
+          </div>
+        )}
       </div>
 
       <div style={cardRowStyle}>
@@ -78,6 +72,10 @@ export function PlayerHand({
           onReorder={onReorder}
           disabled={disabled}
         />
+        <div style={sortButtonsStyle}>
+          <Button onClick={onSortByRank} style={sortButtonStyle}>Sort by rank</Button>
+          <Button onClick={onSortBySuit} style={sortButtonStyle}>Sort by suit</Button>
+        </div>
       </div>
     </Frame>
   )
@@ -87,6 +85,7 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
   const layers = Math.min(count, 6)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, alignSelf: 'flex-end', paddingBottom: 4 }}>
+      <span style={{ fontSize: 11, color: palette.ltGray, fontWeight: 500 }}>{count} in deck</span>
       <div style={{ position: 'relative', width: 71 + layers * 3, height: 96 + layers * 3 }}>
         {count === 0 ? (
           <div style={{
@@ -101,7 +100,7 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
             <div key={i} style={{
               position: 'absolute',
               left: i * 3,
-              top: (layers - 1 - i) * 3,
+              top: (layers - 1 - i) * 2,
               zIndex: i,
             }}>
               <Card card={{ rank: 2, suit: 'clubs' }} faceDown />
@@ -125,15 +124,11 @@ function DeckStack({ count, discardingCards }: { count: number; discardingCards:
 }
 
 const toolbarStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 6,
-  left: 12,
-  right: 12,
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-end',
   gap: 6,
   justifyContent: 'space-between',
-  zIndex: 5,
+  marginBottom: 6,
 }
 
 const cardRowStyle: React.CSSProperties = {
@@ -143,6 +138,19 @@ const cardRowStyle: React.CSSProperties = {
   overflow: 'visible',
   gap: 12,
   marginTop: 32,
+}
+
+const sortButtonsStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  alignSelf: 'flex-end',
+  paddingBottom: 4,
+}
+
+const sortButtonStyle: React.CSSProperties = {
+  marginLeft: 24,
+  whiteSpace: 'nowrap',
 }
 
 const pileDividerStyle: React.CSSProperties = {

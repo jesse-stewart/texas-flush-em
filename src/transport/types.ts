@@ -20,11 +20,16 @@ export type GameAction =
   | { type: 'SET_BOT_DIFFICULTY'; playerId: string; difficulty: BotDifficulty }
   | { type: 'START_GAME'; options?: Partial<GameOptions> }
   | { type: 'READY_FOR_NEXT_ROUND' }
+  | { type: 'CHECK' }
+  | { type: 'BET'; amount: number }
+  | { type: 'CALL' }
+  | { type: 'RAISE'; amount: number }
   | { type: 'DISCARD'; cards: Card[] }
   | { type: 'PLAY'; cards: Card[] }
   | { type: 'FOLD' }
   | { type: 'LEAVE' }
   | { type: 'DEBUG_SET_HAND'; count: number }
+  | { type: 'DEBUG_ADJUST_CHIPS'; delta: number }
   | { type: 'DEBUG_FULL_STATE' }
   | { type: 'PRESENCE'; handOrder: number[]; selectedPositions: number[] }
 

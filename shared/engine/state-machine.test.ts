@@ -21,13 +21,15 @@ function withTwoPlayers(): GameState {
 }
 
 // `decks` parameter: 1 = classic single deck (default); 2-4 = mixed multi-deck pool
+// Forces points scoring with no ante so tests exercise the discard→play flow without betting.
 function startedGame(decks = 1): GameState {
+  const baseOptions = { scoringMode: 'points' as const, anteAmount: 0 }
   if (decks === 1) {
-    return applyCommand(withTwoPlayers(), { type: 'START_GAME' })
+    return applyCommand(withTwoPlayers(), { type: 'START_GAME', options: baseOptions })
   }
   return applyCommand(withTwoPlayers(), {
     type: 'START_GAME',
-    options: { dealMode: 'mixed', mixedDeckCount: decks, cardsPerPlayer: Math.floor(decks * 52 / 2) },
+    options: { ...baseOptions, dealMode: 'mixed', mixedDeckCount: decks, cardsPerPlayer: Math.floor(decks * 52 / 2) },
   })
 }
 
@@ -453,7 +455,7 @@ describe('FOLD', () => {
       { id: 'p2', name: 'Bob' },
       { id: 'p3', name: 'Carol' },
     )
-    s = applyCommand(s, { type: 'START_GAME' })
+    s = applyCommand(s, { type: 'START_GAME', options: { scoringMode: 'points', anteAmount: 0 } })
     // Simulate a prior round where p3 was eliminated: folded=false (reset by endHand),
     // eliminated=true, and removed from playerOrder (as applyNextRound does).
     s = {

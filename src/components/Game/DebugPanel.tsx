@@ -12,8 +12,11 @@ interface DebugPanelProps {
 export function DebugPanel({ state, myPlayerId, send }: DebugPanelProps) {
   const me = state.players.find(p => p.id === myPlayerId)
   const totalCards = (me?.handSize ?? 0) + (me?.deckSize ?? 0)
+  const myChips = state.scores[myPlayerId] ?? 0
+  const isChips = state.options.scoringMode === 'chips'
 
   const counts = [1, 3, 5, 10]
+  const chipDeltas = [-50, -10, +10, +50]
 
   return (
     <Frame
@@ -26,6 +29,7 @@ export function DebugPanel({ state, myPlayerId, send }: DebugPanelProps) {
         gap: 8,
         flexShrink: 0,
         borderTop: '2px solid #a00',
+        flexWrap: 'wrap',
       }}
     >
       <span style={{
@@ -48,6 +52,32 @@ export function DebugPanel({ state, myPlayerId, send }: DebugPanelProps) {
           </Button>
         ))}
       </div>
+
+      {isChips && (
+        <>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#a00',
+            whiteSpace: 'nowrap',
+            marginLeft: 8,
+          }}>
+            chips: ${myChips}
+          </span>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {chipDeltas.map(d => (
+              <Button
+                key={d}
+                onClick={() => send({ type: 'DEBUG_ADJUST_CHIPS', delta: d })}
+                disabled={d < 0 && myChips + d < 0}
+                style={{ minWidth: 50 }}
+              >
+                {d > 0 ? `+$${d}` : `-$${-d}`}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
     </Frame>
   )
 }

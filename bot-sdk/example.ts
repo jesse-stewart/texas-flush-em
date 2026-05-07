@@ -31,6 +31,19 @@ bot.onState((state: ClientGameState) => {
   if (state.phase !== 'playing') return
   if (!isMyTurn(state, bot.playerId)) return
 
+  // Betting phase (only present when the room is chips mode with anteAmount > 0).
+  // Naive policy: check when we can, otherwise call. A real bot would weigh hand strength
+  // and pot odds — see ApiSpecModal for the betting flow.
+  if (state.turnPhase === 'bet') {
+    const myCommitted = state.committed[bot.playerId] ?? 0
+    if (myCommitted >= state.betToMatch) {
+      bot.check()
+    } else {
+      bot.call()
+    }
+    return
+  }
+
   if (state.turnPhase === 'discard') {
     bot.discard([])
     return

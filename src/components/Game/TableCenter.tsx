@@ -4,6 +4,7 @@ import type { ClientGameState } from '@shared/engine/state-machine'
 import type { HandPlay } from '@shared/engine/game-state'
 import { HandCategory } from '@shared/engine/hand-eval'
 import { Card } from '../Card/Card'
+import { ChipStack } from '../Chips/ChipStack'
 import { palette } from '../../palette'
 
 const CARD_WIDTH = 71
@@ -102,7 +103,11 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
       >
         {isMyTurn
           ? <span style={{ color: palette.lose, fontSize: 12, fontWeight: 700 }}>
-              Your turn - {state.turnPhase === 'discard' ? 'select cards to discard, or skip' : 'play a hand or fold'}
+              Your turn - {
+                state.turnPhase === 'bet' ? 'place a bet, call, or fold'
+                : state.turnPhase === 'discard' ? 'select cards to discard, or skip'
+                : 'play a hand or fold'
+              }
             </span>
           : <span style={{ color: palette.black, fontSize: 12 }}>
               {currentPlayer?.name ?? '...'}&apos;s turn
@@ -110,8 +115,23 @@ export function TableCenter({ state, myPlayerId, myLastPlaySlotIds }: TableCente
         }
       </Frame>
 
+      {state.turnPhase === 'bet' && state.betToMatch > 0 && (
+        <Frame bgColor="$material" boxShadow="$out" px="$4" py="$1" style={{ minWidth: 120, textAlign: 'center' }}>
+          <span style={{ fontSize: 11, color: palette.vdkGray }}>to call ${state.betToMatch}</span>
+        </Frame>
+      )}
+
       <div style={tableRowStyle}>
-        <div style={sidePlaceholderStyle} />
+        <div style={potAreaStyle}>
+          {state.options.scoringMode === 'chips' && state.options.anteAmount > 0 && state.pot > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <ChipStack count={state.pot} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: palette.white, textShadow: '1px 1px 0 rgba(0,0,0,0.6)' }}>
+                Pot ${state.pot}
+              </span>
+            </div>
+          )}
+        </div>
 
         <div style={playAreaStyle}>
           {state.currentHandPlays.length === 0 ? (
@@ -175,8 +195,13 @@ const tableRowStyle: React.CSSProperties = {
   justifyContent: 'space-between',
 }
 
-const sidePlaceholderStyle: React.CSSProperties = {
+const potAreaStyle: React.CSSProperties = {
   width: 86,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  minHeight: 140,
 }
 
 const playAreaStyle: React.CSSProperties = {

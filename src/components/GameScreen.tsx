@@ -160,6 +160,20 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
     setSelected([])
   }
 
+  function handleCheck() { send({ type: 'CHECK' }) }
+  function handleCall() { send({ type: 'CALL' }) }
+  function handleBet(amount: number) { send({ type: 'BET', amount }) }
+  function handleRaise(amount: number) { send({ type: 'RAISE', amount }) }
+
+  // Staged bet/raise total committed across the current betting turn. null = not staging.
+  // Used to preview a chip transfer from the player's stack to the "current bet" stack
+  // in the ActionBar before the action is committed.
+  const [bettingTarget, setBettingTarget] = useState<number | null>(null)
+  useEffect(() => {
+    // Reset whenever the turn or bet line changes — a stale staged target may now be invalid.
+    setBettingTarget(null)
+  }, [state.turnPhase, state.currentPlayerId, state.betToMatch])
+
   function sortByRank() {
     setCardOrder(prev =>
       [...prev].sort((a, b) =>
@@ -179,12 +193,41 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
   }
 
   const isChipsMode = state.options.scoringMode === 'chips'
-  const chipCountOf = (id: string): number | null =>
-    isChipsMode ? (state.scores[id] ?? 0) : null
+  // `bettingTarget` is the increment (chips this turn) — already non-negative and
+  // clamped to stack inside the ActionBar. Subtract directly from the displayed stack.
+  const pendingBet = bettingTarget != null
+    ? Math.max(0, Math.min(bettingTarget, state.scores[myPlayerId] ?? 0))
+    : 0
+  const chipCountOf = (id: string): number | null => {
+    if (!isChipsMode) return null
+    const base = state.scores[id] ?? 0
+    if (id === myPlayerId && pendingBet > 0) return Math.max(0, base - pendingBet)
+    return base
+  }
   const chipCounts: Record<string, number> | undefined = isChipsMode
-    ? Object.fromEntries(state.players.map(p => [p.id, state.scores[p.id] ?? 0]))
+    ? Object.fromEntries(state.players.map(p => [p.id, chipCountOf(p.id) ?? 0]))
     : undefined
   const myPlayerName = state.players.find(p => p.id === myPlayerId)?.name
+
+  // Single ActionBar element passed into both PlayerHand instances (3-opponent grid
+  // and the fewer-opponent fallback) so the action buttons sit on the same row as
+  // the hand/deck info and sort buttons.
+  const actionBar = (
+    <ActionBar
+      state={state}
+      myPlayerId={myPlayerId}
+      selected={selectedCards}
+      onDiscard={handleDiscard}
+      onPlay={handlePlay}
+      onFold={handleFold}
+      onCheck={handleCheck}
+      onCall={handleCall}
+      onBet={handleBet}
+      onRaise={handleRaise}
+      bettingTarget={bettingTarget}
+      onBettingTargetChange={setBettingTarget}
+    />
+  )
 
   return (
     <Frame
@@ -250,12 +293,15 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
           fontSize: 12,
         }}
       >
-        {state.players.map(p => (
-          <span key={p.id} style={{ fontWeight: p.id === myPlayerId ? 700 : 400 }}>
-            {p.name}: {state.scores[p.id] ?? 0}
-            {state.options.scoringMode === 'points' && `/${state.options.threshold}`}
-          </span>
-        ))}
+        {state.players.map(p => {
+          const score = state.scores[p.id] ?? 0
+          const isChips = state.options.scoringMode === 'chips'
+          return (
+            <span key={p.id}>
+              {p.name}: {isChips ? `$${score}` : `${score}/${state.options.threshold}`}
+            </span>
+          )
+        })}
       </Frame>
 
       {/* Play area — green felt sunken into the window */}
@@ -321,15 +367,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
               </div>
 
               <div style={{ gridArea: 'bottom', paddingTop: 24 }}>
-                <ActionBar
-                  state={state}
-                  myPlayerId={myPlayerId}
-                  selected={selectedCards}
-                  onDiscard={handleDiscard}
-                  onPlay={handlePlay}
-                  onFold={handleFold}
-                />
-
                 <PlayerHand
                   cards={cards}
                   ids={ids}
@@ -344,6 +381,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                   isDealer={state.dealerId === myPlayerId}
                   chipCount={chipCountOf(myPlayerId)}
                   playerName={myPlayerName}
+                  actionSlot={actionBar}
                 />
               </div>
             </div>
@@ -362,15 +400,6 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
 
               <TableCenter state={state} myPlayerId={myPlayerId} myLastPlaySlotIds={myLastPlaySlotIds} />
 
-              <ActionBar
-                state={state}
-                myPlayerId={myPlayerId}
-                selected={selectedCards}
-                onDiscard={handleDiscard}
-                onPlay={handlePlay}
-                onFold={handleFold}
-              />
-
               <PlayerHand
                 cards={cards}
                 ids={ids}
@@ -385,6 +414,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
                 isDealer={state.dealerId === myPlayerId}
                 chipCount={chipCountOf(myPlayerId)}
                 playerName={myPlayerName}
+                actionSlot={actionBar}
               />
             </>
           )}
@@ -404,7 +434,7 @@ export function GameScreen({ state, myPlayerId, roomId, send, presence, onLeave 
       {import.meta.env.DEV && (
         <DebugPanel state={state} myPlayerId={myPlayerId} send={send} />
       )}
-      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} options={state.options} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {apiOpen && <ApiSpecModal onClose={() => setApiOpen(false)} />}
       {cardBackOpen && <CardBackPicker onClose={() => setCardBackOpen(false)} />}

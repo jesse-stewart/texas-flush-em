@@ -14,9 +14,12 @@ interface EventBubbleProps {
   myPlayerId: string
   players: PlayerView[]
   isCurrentTurn: boolean
+  // Anchors the bubble within its slot. Use 'left'/'right' for side-seated
+  // opponents so a long bubble grows toward the table center, not off-screen.
+  align?: 'left' | 'center' | 'right'
 }
 
-export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTurn }: EventBubbleProps) {
+export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTurn, align = 'center' }: EventBubbleProps) {
   const [, tick] = useState(0)
   const lastEvent = latestEventForPlayer(events, playerId)
 
@@ -57,6 +60,7 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
   }
 
   const key = content ? content.text : 'empty'
+  const anchor = anchorStyle(align)
 
   return (
     <div style={wrapStyle} aria-live="polite">
@@ -68,7 +72,7 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.96 }}
             transition={{ duration: 0.18 }}
-            style={{ ...bubbleStyle, ...toneStyle(content.tone) }}
+            style={{ ...bubbleStyle, ...anchor, ...toneStyle(content.tone) }}
           >
             {content.text}
           </motion.div>
@@ -76,6 +80,18 @@ export function EventBubble({ events, playerId, myPlayerId, players, isCurrentTu
       </AnimatePresence>
     </div>
   )
+}
+
+// Anchors the absolute-positioned bubble within its slot. Center uses
+// left:50% + x:-50% (framer-motion's translateX) so y/scale animations compose.
+// Left/right pin to the matching edge so a long bubble grows toward the table.
+function anchorStyle(align: 'left' | 'center' | 'right'): Record<string, string | number> {
+  switch (align) {
+    case 'left':  return { left: 0 }
+    case 'right': return { right: 0 }
+    case 'center':
+    default:      return { left: '50%', x: '-50%' }
+  }
 }
 
 // Win95 chiseled-frame look: gray surface with raised border, except colored variants for tone.
@@ -95,13 +111,15 @@ function toneStyle(tone: FormattedEvent['tone']): React.CSSProperties {
 }
 
 const wrapStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  minHeight: 26,
+  position: 'relative',
+  height: 26,
+  width: '100%',
   pointerEvents: 'none',
 }
 
 const bubbleStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
   fontSize: 11,
   fontWeight: 700,
   padding: '3px 10px',

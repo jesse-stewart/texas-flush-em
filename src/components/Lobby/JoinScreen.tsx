@@ -5,6 +5,7 @@ import { RulesModal } from '../RulesModal'
 import { AboutModal } from '../AboutModal'
 import { ApiSpecModal } from '../ApiSpecModal'
 import { MenuBar } from '../MenuBar'
+import { Icon } from '../Icon/Icon'
 import { palette } from '../../palette'
 
 interface JoinScreenProps {
@@ -70,7 +71,10 @@ export function JoinScreen({ onJoin, onSpectate, prefilledRoom, prefilledName, p
           ]}
         />
         <div style={{ padding: 16 }}>
-          <p style={{ margin: '0 0 16px', fontSize: 12 }}>Deck poker for 2-4 players</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+            <Icon name="app" size={64} label="Texas Flush'em" />
+            <p style={{ margin: 0, fontSize: 12 }}>Deck poker for 2-4 players</p>
+          </div>
 
           <Field label="Your name">
             <TextInput

@@ -10,7 +10,7 @@ function startedTwoPlayer(): { state: GameState; activeBotId: string } {
   let s = initialState()
   s = applyCommand(s, { type: 'ADD_BOT', playerId: 'bot1', playerName: 'Bot 1' })
   s = applyCommand(s, { type: 'ADD_BOT', playerId: 'bot2', playerName: 'Bot 2' })
-  s = applyCommand(s, { type: 'START_GAME' })
+  s = applyCommand(s, { type: 'START_GAME', options: { scoringMode: 'points', anteAmount: 0 } })
   const activeBotId = s.playerOrder[s.currentPlayerIndex]
   return { state: s, activeBotId }
 }

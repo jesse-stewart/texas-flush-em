@@ -18,7 +18,7 @@ import { createBot, isMyTurn } from '../../bot-sdk'
 import type { Card, ClientGameState } from '../../bot-sdk'
 import { config } from './config'
 import { buildTurnPrompt } from './prompts'
-import { discardTool, playTool, foldTool } from './tools'
+import { discardTool, playTool, foldTool, checkTool, callTool, betTool, raiseTool } from './tools'
 
 const anthropic = new Anthropic()  // reads ANTHROPIC_API_KEY from env
 
@@ -242,10 +242,15 @@ async function takeTurn(state: ClientGameState) {
 
   // Constrain the available tools to the current phase. The model can ONLY call
   // these — preventing e.g. fold during the discard phase.
+  // Bet phase: which betting tools are legal depends on whether there's an outstanding bet.
+  const myCommitted = state.committed[bot.playerId] ?? 0
+  const owe = state.betToMatch - myCommitted
   const tools =
-    phase === 'discard'
-      ? [discardTool]
-      : [playTool, foldTool]
+    phase === 'bet'
+      ? (owe === 0 ? [checkTool, betTool, foldTool] : [callTool, raiseTool, foldTool])
+      : phase === 'discard'
+        ? [discardTool]
+        : [playTool, foldTool]
 
   // 'auto' (not 'any'/'tool'): forced tool_choice is incompatible with adaptive thinking.
   // The phase-restricted tools array + system prompt instruction reliably steer Claude to
@@ -339,6 +344,36 @@ function dispatch(state: ClientGameState, toolUse: Anthropic.ToolUseBlock) {
     return
   }
 
+  if (toolUse.name === 'check') {
+    if (typeof input.reasoning === 'string') console.log(`  reasoning: ${input.reasoning}`)
+    console.log(`  check`)
+    bot.check()
+    return
+  }
+
+  if (toolUse.name === 'call') {
+    if (typeof input.reasoning === 'string') console.log(`  reasoning: ${input.reasoning}`)
+    console.log(`  call`)
+    bot.call()
+    return
+  }
+
+  if (toolUse.name === 'bet') {
+    const amount = typeof input.amount === 'number' ? input.amount : 0
+    if (typeof input.reasoning === 'string') console.log(`  reasoning: ${input.reasoning}`)
+    console.log(`  bet to $${amount}`)
+    bot.bet(amount)
+    return
+  }
+
+  if (toolUse.name === 'raise') {
+    const amount = typeof input.amount === 'number' ? input.amount : 0
+    if (typeof input.reasoning === 'string') console.log(`  reasoning: ${input.reasoning}`)
+    console.log(`  raise to $${amount}`)
+    bot.raise(amount)
+    return
+  }
+
   throw new Error(`Unknown tool: ${toolUse.name}`)
 }
 
@@ -385,6 +420,11 @@ function describeCards(cards: Card[]): string { return cards.map(describeCard).j
 function safeFallback(state: ClientGameState) {
   if (state.turnPhase === 'discard') {
     bot.discard([])
+  } else if (state.turnPhase === 'bet') {
+    // Check if free, otherwise fold — keeps chips safe when we can't reason.
+    const myCommitted = state.committed[bot.playerId] ?? 0
+    if (state.betToMatch === myCommitted) bot.check()
+    else bot.fold()
   } else {
     bot.fold()
   }

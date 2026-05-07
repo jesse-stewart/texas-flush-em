@@ -41,8 +41,16 @@ Mixed-deck variants (only when \`dealMode\` is "mixed" with 2+ decks): FLUSH_PAI
 
 # Your action this turn
 You'll be told the current phase. Call exactly ONE tool:
+- BET phase (chips mode + ante > 0) → call \`check\` / \`bet\` / \`call\` / \`raise\` / \`fold\` (only the subset legal for your situation will be exposed).
 - DISCARD phase → call \`discard\` (\`cards\` may be an empty array).
 - PLAY phase → call \`play\` (with a legal hand that strictly beats the top play) OR \`fold\`.
+
+# Betting strategy (BET phase only)
+- Antes are auto-posted at hand start. The pot is whatever has been committed so far this hand.
+- The hand winner takes the pot; the round-end \`chipValuePerCard\` transfer still happens on top.
+- Compare your current hand's strongest playable category to the pot odds (\`betToMatch / (pot + betToMatch)\`). Call when your win probability beats pot odds, raise when it's well above.
+- Remember: this is Deck Poker, not Hold'em. You'll improve as you cycle cards through your deck — your starting hand isn't the final word. Don't over-commit on a starting hand alone.
+- \`bet\` and \`raise\` take an \`amount\` which is the TOTAL chips you'll have committed this hand after the action (poker "bet to $X" / "raise to $X" semantics, not the increment).
 
 Do not emit prose outside the tool call. Use the \`reasoning\` field on the tool to record your strategic justification — this is logged for the operator.`
 
@@ -165,8 +173,34 @@ export function buildTurnPrompt(state: ClientGameState, myPlayerId: string): Tur
     lines.push('')
   }
 
+  // Betting context — only meaningful when betting is enabled.
+  if (opts.scoringMode === 'chips' && opts.anteAmount > 0) {
+    const myCommitted = state.committed[myPlayerId] ?? 0
+    const myStack = state.scores[myPlayerId] ?? 0
+    const owe = state.betToMatch - myCommitted
+    lines.push(`# Betting`)
+    lines.push(`- Ante: $${opts.anteAmount} per hand (auto-posted)`)
+    lines.push(`- Pot: $${state.pot}`)
+    lines.push(`- Bet to match: $${state.betToMatch}`)
+    lines.push(`- Your committed this hand: $${myCommitted}`)
+    lines.push(`- Your stack: $${myStack}`)
+    if (state.turnPhase === 'bet') {
+      lines.push(`- You owe to call: $${Math.min(owe, myStack)}${owe > myStack ? ' (would be all-in)' : ''}`)
+      lines.push(`- Min-raise increment: $${state.minRaise}`)
+    }
+    lines.push('')
+  }
+
   lines.push(`# Your turn`)
-  if (state.turnPhase === 'discard') {
+  if (state.turnPhase === 'bet') {
+    const myCommitted = state.committed[myPlayerId] ?? 0
+    const owe = state.betToMatch - myCommitted
+    if (owe === 0) {
+      lines.push(`Phase: **BET**. No outstanding bet to call. You may \`check\` (free pass), \`bet\` (open the betting), or \`fold\`.`)
+    } else {
+      lines.push(`Phase: **BET**. There's an outstanding bet to call. You may \`call\` (match $${state.betToMatch}), \`raise\` (to a higher total), or \`fold\`.`)
+    }
+  } else if (state.turnPhase === 'discard') {
     if (state.myDeckSize === 0) {
       lines.push(`Your deck is empty — discard is automatically skipped. Call 'discard' with an empty cards array to advance.`)
     } else {

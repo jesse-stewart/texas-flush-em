@@ -42,6 +42,30 @@ export function formatEvent(
     }
     case 'folded':
       return { text: `${subject(event.playerId, players, myPlayerId)} folded`, tone: 'negative' }
+    case 'ante_posted': {
+      const subj = subject(event.playerId, players, myPlayerId)
+      const allIn = event.allIn ? ' (all-in)' : ''
+      return { text: `${subj} posted ante $${event.amount}${allIn}`, tone: 'neutral' }
+    }
+    case 'checked':
+      return { text: `${subject(event.playerId, players, myPlayerId)} checked`, tone: 'neutral' }
+    case 'bet': {
+      const subj = subject(event.playerId, players, myPlayerId)
+      const allIn = event.allIn ? ' (all-in)' : ''
+      return { text: `${subj} bet $${event.amount}${allIn}`, tone: 'neutral' }
+    }
+    case 'called': {
+      const subj = subject(event.playerId, players, myPlayerId)
+      const allIn = event.allIn ? ' (all-in)' : ''
+      return { text: `${subj} called $${event.amount}${allIn}`, tone: 'neutral' }
+    }
+    case 'raised': {
+      const subj = subject(event.playerId, players, myPlayerId)
+      const allIn = event.allIn ? ' (all-in)' : ''
+      return { text: `${subj} raised to $${event.to}${allIn}`, tone: 'neutral' }
+    }
+    case 'pot_won':
+      return { text: `${subject(event.playerId, players, myPlayerId)} won $${event.amount}`, tone: 'positive' }
     case 'hand_won':
       return { text: `${subject(event.playerId, players, myPlayerId)} won the hand`, tone: 'positive' }
     case 'round_won':

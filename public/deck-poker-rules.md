@@ -99,9 +99,31 @@ Each non-winning player adds their card count to a running cumulative score. Low
 
 ### Chips Mode (gambling variant)
 
-Each player starts with an agreed pile of chips (default: 78). After each round, each non-winning player pays the table's chip-per-card value for every card remaining in their hand (capped at 10 cards). The round winner takes the pot. Game ends when only one player has chips left.
+Each player starts with an agreed pile of chips (default: 60). After each round, each non-winning player pays the table's chip-per-card value for every card remaining in their hand (capped at 10 cards). The round winner takes the pot. Game ends when only one player has chips left.
 
-The **chip-per-card value** is set before play (default 6, up to 100). Higher values mean rounds swing more chips and games end faster. A loser can never go below zero — their loss is capped at their current chip balance.
+The **chip-per-card value** is set before play (default 5, up to 100). Higher values mean rounds swing more chips and games end faster. A loser can never go below zero — their loss is capped at their current chip balance.
+
+#### Betting (optional, chips mode only)
+
+A betting round can run at the start of every **hand** (not round). Set an **ante amount** before play (default 5; 0 disables betting and the rest of this section doesn't apply). Antes plus any bets/calls/raises form a **hand pot**, paid to the hand winner. The round-end chip-per-card transfer still happens on top.
+
+**Hand-start antes.** Before the first action of every hand, each non-folded, non-eliminated player posts the ante into the pot. A player who can't afford the full ante posts what they have and goes **all-in** (they keep playing this hand but cannot bet, call, or raise further).
+
+**Betting round.** After antes, action moves clockwise from the dealer's left. On your turn you may:
+
+- **Check** — pass without putting more chips in. Only legal when there is no outstanding bet to call (you've already matched the highest committed amount, e.g. just the ante).
+- **Bet** — open the betting. Only legal when nobody has bet beyond the ante yet. Minimum bet = one ante. Pushes chips into the pot and sets a new amount-to-match for the round.
+- **Call** — match the current amount-to-match. If you don't have enough chips, you go all-in for what you have (see *Side pots*).
+- **Raise** — increase the amount-to-match. The raise must be at least the size of the previous bet/raise (or all-in for less). After a raise, every other player who hasn't folded must act again on the new amount.
+- **Fold** — give up this hand. Any chips you've already committed stay in the pot. If you fold during betting, you don't get a chance to play cards this hand.
+
+The betting round ends when every non-folded, non-all-in player has acted at least once since the last bet/raise *and* has either matched the amount-to-match or gone all-in. After that, the hand proceeds to the normal discard → play sequence.
+
+**Pot resolution.** When the hand ends (either by play resolving normally or by everyone but one player folding), the hand winner takes the pot. The round-end chip-per-card transfer happens after the pot is awarded, so a player can win the hand pot but still lose chips at round end if they're holding cards.
+
+**Side pots.** When two or more players are all-in for different amounts, the pot splits into tiers. Each tier is contested only by the players who put chips into it. The winner of each tier is determined the same way as the main pot (best play among eligible non-folded players). A short-stack all-in player can win at most the tier(s) they paid into; any chips committed beyond that go to the next side pot, contestable by the players who could afford it.
+
+**Folding to one player during betting.** If everyone but one player folds during the betting round, that lone player wins the entire pot uncontested and the hand ends without a discard or play phase.
 
 ## Next Round
 

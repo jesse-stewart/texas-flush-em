@@ -18,6 +18,12 @@ export type GameEvent =
   | { ts: number; type: 'discarded'; playerId: string; count: number }
   | { ts: number; type: 'played'; playerId: string; category: HandCategory; cards: Card[] }
   | { ts: number; type: 'folded'; playerId: string }
+  | { ts: number; type: 'ante_posted'; playerId: string; amount: number; allIn: boolean }
+  | { ts: number; type: 'checked'; playerId: string }
+  | { ts: number; type: 'bet'; playerId: string; amount: number; allIn: boolean }
+  | { ts: number; type: 'called'; playerId: string; amount: number; allIn: boolean }
+  | { ts: number; type: 'raised'; playerId: string; to: number; allIn: boolean }
+  | { ts: number; type: 'pot_won'; playerId: string; amount: number; potIndex: number }
   | { ts: number; type: 'hand_won'; playerId: string }
   | { ts: number; type: 'round_won'; playerId: string; emptied: boolean }
   | { ts: number; type: 'eliminated'; playerId: string }
@@ -54,6 +60,9 @@ export interface GameOptions {
   cardsPerPlayer: number
   // Mixed only: how many 52-card decks shuffled together (1–4).
   mixedDeckCount: number
+  // Chips-only: forced ante each active player posts at the start of every hand.
+  // 0 = betting disabled (current behavior). Lobby clamps to [0, floor(threshold/2)].
+  anteAmount: number
 }
 
 // Initial draw size — every player must start with at least this many cards or the game can't open.
@@ -64,13 +73,14 @@ export const MIN_CHIP_VALUE_PER_CARD = 1
 export const MAX_CHIP_VALUE_PER_CARD = 100
 
 export const DEFAULT_OPTIONS: GameOptions = {
-  scoringMode: 'points',
-  threshold: 26,
+  scoringMode: 'chips',
+  threshold: 60,
   pointsThresholdAction: 'eliminate',
-  chipValuePerCard: 6,
+  chipValuePerCard: 5,
   dealMode: 'classic',
   cardsPerPlayer: PERSONAL_MAX_CARDS,
   mixedDeckCount: 2,
+  anteAmount: 5,
 }
 
 export interface PlayerState {
@@ -84,6 +94,8 @@ export interface PlayerState {
   isBot: boolean     // server-controlled CPU player; no real WebSocket connection
   isApi: boolean     // externally-controlled bot connected via the public API; behaves like a human at the engine level
   botDifficulty?: BotDifficulty  // bots only; undefined for humans
+  // Betting (chips mode + anteAmount > 0). Cleared when a hand ends.
+  allIn: boolean     // committed entire stack this hand; can no longer act
 }
 
 export interface GameState {
@@ -97,11 +109,17 @@ export interface GameState {
   dealerId: string | null
   currentPlayerIndex: number        // index into playerOrder
   leadPlayerIndex: number           // who led this hand
-  turnPhase: 'discard' | 'play'    // where we are within the current player's turn
+  turnPhase: 'bet' | 'discard' | 'play'  // 'bet' only used when betting is enabled
   currentTopPlay: EvaluatedHand | null
   currentTopPlayerId: string | null // who made the currentTopPlay
   currentHandPlays: HandPlay[]      // all plays made in the current hand, oldest first
   middlePile: Card[]                // all cards set aside from completed hands
+  // ----- Betting (chips mode + anteAmount > 0). All zero/empty when betting is off. -----
+  pot: number                            // total chips committed this hand (sum of `committed`)
+  committed: Record<string, number>      // chips each player has committed this hand (drives side-pot tiers)
+  betToMatch: number                     // largest committed amount among non-folded players
+  minRaise: number                       // minimum raise increment for the next raise (= last bet/raise size, floored at anteAmount)
+  bettingActedSinceRaise: string[]       // playerIds who've acted since the last bet/raise; reset on each bet/raise
   roundWinnerId: string | null
   gameWinnerId: string | null       // set when phase === 'game_end'
   // Points mode: cumulative penalty points (lower = better). Chips mode: current chip balance (higher = better).

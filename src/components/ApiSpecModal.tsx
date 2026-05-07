@@ -82,6 +82,13 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
               <li><Mono>{'{ "type": "LEAVE" }'}</Mono> — leave the game.</li>
               <li><Mono>{'{ "type": "READY_FOR_NEXT_ROUND" }'}</Mono> — between rounds, signal you&apos;re ready.</li>
             </ul>
+            <p style={{ margin: '8px 0 4px' }}>Betting actions (chips mode + <Mono>anteAmount &gt; 0</Mono> only, during <Mono>turnPhase === &quot;bet&quot;</Mono>):</p>
+            <ul style={listStyle}>
+              <li><Mono>{'{ "type": "CHECK" }'}</Mono> — pass when there&apos;s no outstanding bet to call.</li>
+              <li><Mono>{'{ "type": "BET", "amount": N }'}</Mono> — open the betting. <Mono>amount</Mono> is the TOTAL chips you&apos;ll have committed this hand after the bet. Min target = <Mono>betToMatch + anteAmount</Mono>.</li>
+              <li><Mono>{'{ "type": "CALL" }'}</Mono> — match the current <Mono>betToMatch</Mono>. Auto-converts to all-in if you&apos;re short.</li>
+              <li><Mono>{'{ "type": "RAISE", "amount": N }'}</Mono> — raise. <Mono>amount</Mono> is the new total to commit. Min target = <Mono>betToMatch + minRaise</Mono>.</li>
+            </ul>
             <p style={{ margin: '8px 0 4px' }}>Lobby-only actions (no-ops outside the <Mono>lobby</Mono> phase):</p>
             <ul style={listStyle}>
               <li><Mono>{'{ "type": "ADD_BOT", "difficulty": "easy"|"medium"|"hard" }'}</Mono> — add a CPU bot. Difficulty defaults to medium.</li>
@@ -90,7 +97,7 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
               <li><Mono>{'{ "type": "START_GAME", "options": { ... } }'}</Mono> — start the game with the given options (see <b>Game options</b> below). Requires ≥2 players.</li>
             </ul>
             <p style={{ margin: '6px 0 0', color: palette.dkGray }}>
-              Each turn requires <b>DISCARD then PLAY or FOLD</b>, in that order. Invalid actions are silently ignored by the server — your state will not advance.
+              Each turn requires <b>DISCARD then PLAY or FOLD</b>, in that order. When betting is enabled, a <b>BET phase</b> runs at the start of every hand: antes are auto-posted, then each player checks/bets/calls/raises/folds clockwise from the dealer&apos;s left. The hand winner takes the pot; round-end <Mono>chipValuePerCard</Mono> transfers still happen on top. Invalid actions are silently ignored.
             </p>
           </Section>
 
@@ -103,6 +110,7 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
   "threshold": number,                       // points target, OR starting chips. default 26
   "pointsThresholdAction": "eliminate" | "end_game", // points-only. default "eliminate"
   "chipValuePerCard": number,                // chips-only. 1–100. default 6
+  "anteAmount": number,                      // chips-only. 0 disables betting. default 0
   "dealMode": "classic" | "personal" | "mixed",      // default "classic"
   "cardsPerPlayer": number,                  // personal/mixed only; classic ignores
   "mixedDeckCount": number                   // mixed only, 1–4. default 2
@@ -111,6 +119,7 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
               <li><b>scoringMode</b> — <Mono>points</Mono> accumulates penalty points (lower = better); <Mono>chips</Mono> transfers chips between players.</li>
               <li><b>threshold</b> — in points mode, hitting it triggers <Mono>pointsThresholdAction</Mono>; in chips mode, the starting chip pile per player.</li>
               <li><b>chipValuePerCard</b> — chips mode only. Each remaining card a loser holds at round end is worth this many chips. Default 1, up to 100. Loss is capped at the loser&apos;s current balance so chips never go negative.</li>
+              <li><b>anteAmount</b> — chips mode only. Each active player posts this much at the start of every hand. <Mono>0</Mono> disables betting (legacy flow). Lobby clamps to <Mono>floor(threshold / 2)</Mono>; players who can&apos;t afford the full ante post a partial one and go all-in.</li>
               <li><b>dealMode</b> — <Mono>classic</Mono> deals one shared 52-card deck round-robin; <Mono>personal</Mono> gives each player their own private deck; <Mono>mixed</Mono> shuffles <Mono>mixedDeckCount</Mono> decks together.</li>
             </ul>
           </Section>
@@ -125,10 +134,15 @@ export function ApiSpecModal({ onClose }: ApiSpecModalProps) {
                   "isConnected", "eliminated", "isBot", "isApi" }],
     "myHand": [{ "rank", "suit" }],
     "myDeckSize": 42,
-    "turnPhase": "discard" | "play",
+    "turnPhase": "bet" | "discard" | "play",
     "currentPlayerId": "...",
     "currentTopPlay": { "category", "cards": [...] } | null,
     "scores": { "<playerId>": <number> },
+    // Betting fields (zero/empty when betting disabled):
+    "pot": <number>,
+    "committed": { "<playerId>": <number> },   // chips committed this hand
+    "betToMatch": <number>,
+    "minRaise": <number>,
     "options": { ... },
     ...
   }

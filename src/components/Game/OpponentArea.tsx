@@ -58,6 +58,16 @@ const FAKE_CARDS: CardType[] = Array.from({ length: 52 }, (_, i) => ({
   suit: SUITS[Math.floor(i / 13)],
 }))
 
+// Width that holds a full 10-card opponent hand. Card width 71 + 9 gaps of 22
+// (CARD_STEP from Hand.tsx). Reserved as a fixed slot so playing/discarding
+// doesn't shrink the seat and shift the row.
+const HAND_SLOT_WIDTH = 71 + 9 * 22
+
+// Visual cap on the deck stack — matches the `Math.min(deckCount, 4)` logic
+// below. Used to reserve constant slot dimensions so the deck pile doesn't
+// shrink horizontally as cards leave the deck.
+const DECK_MAX_LAYERS = 4
+
 export function OpponentSeat({
   player, isActive, isDealer, presence, events, myPlayerId, allPlayers,
   orientation = 'horizontal', chipCount,
@@ -87,6 +97,7 @@ export function OpponentSeat({
   const selectedIndices = presence?.selectedPositions ?? []
 
   const hasLeft = player.eliminated && !player.isBot && !player.isConnected
+  const statusText = hasLeft ? 'left' : player.eliminated ? 'out' : player.folded ? 'folded' : ''
 
   return (
     <div style={{ ...seatStyle, opacity: hasLeft ? 0.5 : 1 }}>
@@ -96,8 +107,12 @@ export function OpponentSeat({
         myPlayerId={myPlayerId}
         players={allPlayers}
         isCurrentTurn={isActive}
+        align={orientation === 'left' ? 'left' : orientation === 'right' ? 'right' : 'center'}
       />
-      {/* Win95 nameplate — the activated state mimics a focused titlebar */}
+      {/* Win95 nameplate — the activated state mimics a focused titlebar.
+          Hourglass and dealer badge live in fixed-size slots so toggling them
+          (active player rotates each turn, dealer rotates each hand) doesn't
+          change the nameplate's width and shift the row. */}
       <Frame
         bgColor={isActive ? '$headerBackground' : '$material'}
         boxShadow="$out"
@@ -119,11 +134,12 @@ export function OpponentSeat({
         <span style={{ fontWeight: 700 }}>
           {player.name}
         </span>
-        {isActive && <Hourglass size={20} />}
-        {hasLeft && <span style={{ opacity: 0.7 }}>· left</span>}
-        {!hasLeft && player.eliminated && <span style={{ opacity: 0.7 }}>· out</span>}
-        {!player.eliminated && player.folded && <span style={{ opacity: 0.7 }}>· folded</span>}
-        {isDealer && <span style={dealerBadgeStyle} title="Dealer">D</span>}
+        <span style={hourglassSlotStyle}>
+          {isActive && <Hourglass size={20} />}
+        </span>
+        <span style={dealerSlotStyle}>
+          {isDealer && <span style={dealerBadgeStyle} title="Dealer">D</span>}
+        </span>
         {player.isBot && player.botDifficulty && (
           <span style={{
             fontSize: 10,
@@ -141,13 +157,17 @@ export function OpponentSeat({
           </span>
         )}
       </Frame>
+      <div style={statusCaptionStyle}>{statusText}</div>
 
       <div style={
         orientation === 'left' ? pilesVerticalLeftStyle :
         orientation === 'right' ? pilesVerticalRightStyle :
         pilesStyle
       }>
-        <div style={pileGroupStyle}>
+        {/* Hand slot reserves max width (10 cards) so the seat — and the row — don't
+            shift as cards are played. Vertical orientations keep their natural width;
+            VerticalCardStack drives that. */}
+        <div style={isVertical ? pileGroupStyle : { ...pileGroupStyle, width: HAND_SLOT_WIDTH }}>
           {handCount === 0 ? (
             <span style={emptyLabelStyle}>empty</span>
           ) : isVertical ? (
@@ -173,11 +193,13 @@ export function OpponentSeat({
         <div style={isVertical ? pileDividerVerticalStyle : pileDividerStyle} />
 
         <div style={pileGroupStyle}>
+          {/* Container reserves space for a 4-deep stack (the visual cap) so the
+              piles row doesn't shrink horizontally as the deck empties. */}
           <div
             style={{
               position: 'relative',
-              width: (isVertical ? 96 : 71) + deckLayers * 3,
-              height: (isVertical ? 71 : 96) + deckLayers * 3,
+              width: (isVertical ? 96 : 71) + DECK_MAX_LAYERS * 3,
+              height: (isVertical ? 71 : 96) + DECK_MAX_LAYERS * 3,
             }}
           >
             {deckCount === 0 ? (
@@ -210,7 +232,7 @@ export function OpponentSeat({
                     style={{
                       position: 'absolute',
                       left: i * 3,
-                      top: (deckLayers - 1 - i) * 3,
+                      top: (deckLayers - 1 - i) * 2,
                       zIndex: i,
                       transform: isAcross ? 'rotate(180deg)' : undefined,
                     }}
@@ -299,6 +321,37 @@ const dealerBadgeStyle: React.CSSProperties = {
   backgroundColor: palette.dealerYellow,
   border: `1px solid ${palette.black}`,
   flexShrink: 0,
+}
+
+// Fixed-size slots reserve room for the hourglass / dealer badge so toggling
+// them mid-game doesn't change the nameplate's width and shift the row.
+const hourglassSlotStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 20,
+  height: 20,
+  flexShrink: 0,
+}
+
+const dealerSlotStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 18,
+  height: 18,
+  flexShrink: 0,
+}
+
+// Reserved-height status caption beneath the nameplate. Folded/out/left text
+// lives here instead of inside the nameplate so it can't change width.
+const statusCaptionStyle: React.CSSProperties = {
+  height: 14,
+  fontSize: 11,
+  fontStyle: 'italic',
+  color: palette.ltGray,
+  opacity: 0.7,
+  lineHeight: '14px',
 }
 
 const pilesStyle: React.CSSProperties = {
