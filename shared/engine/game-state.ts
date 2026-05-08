@@ -124,8 +124,12 @@ export interface GameState {
   gameWinnerId: string | null       // set when phase === 'game_end'
   // Points mode: cumulative penalty points (lower = better). Chips mode: current chip balance (higher = better).
   scores: Record<string, number>
+  // Card-scoring delta applied at round end only (does not include hand-by-hand betting transfers).
   // Points mode: positive = points added this round. Chips mode: signed — winner positive, losers negative.
   roundScoreDelta: Record<string, number>
+  // Snapshot of scores captured at the start of the round. Combined with roundScoreDelta lets the
+  // UI show a betting breakdown: bettingDelta = (currentScore - roundStartScore) - roundScoreDelta.
+  roundStartScores: Record<string, number>
   // Total decks worth of cards in play (used by the bot for hidden-card reasoning):
   //   classic = 1, mixed = mixedDeckCount, personal = playerCount (one private deck per player)
   deckCount: number

@@ -55,6 +55,7 @@ export function mockState(overrides: Partial<ClientGameState> = {}): ClientGameS
     gameWinnerId: null,
     scores: { p1: 0, p2: 0 },
     roundScoreDelta: {},
+    roundStartScores: {},
     middlePileCount: 0,
     options: mockOptions(),
     pot: 0,
