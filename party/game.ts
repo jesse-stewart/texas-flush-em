@@ -6,11 +6,17 @@
 import type * as Party from 'partykit/server'
 import type { GameEvent } from '../src/transport/types'
 import { applyCommand, buildClientState, initialState } from '../shared/engine/state-machine'
+import type { GameCommand } from '../shared/engine/state-machine'
 import type { GameState } from '../shared/engine/game-state'
 import { DEFAULT_BOT_DIFFICULTY } from '../shared/engine/game-state'
 import { chooseBotMove, presetForDifficulty } from '../shared/engine/bot-ismcts'
 import { chooseBettingAction } from '../shared/engine/bot-betting'
 import { parseGameAction, parsePresenceMessage } from './validation'
+import { HistoryRecorder } from './history-recorder'
+
+// Stashed on each Connection so onMessage / onClose can read the IP without
+// re-parsing headers. cf-connecting-ip is set at onConnect time.
+type ConnState = { ip: string; userAgent: string }
 
 const BOT_THINK_DELAY_MS = 250     // pause before the bot starts computing, so UIs paint "thinking"
 const IDLE_TTL_MS = 24 * 60 * 60 * 1000  // wipe room storage after 24h with no activity
@@ -42,8 +48,22 @@ export default class GameParty implements Party.Server {
   // Sliding window of recent connection timestamps per source IP (this room only).
   // Pruned on each new connection; entries auto-expire when the room hibernates.
   private connectsByIp = new Map<string, number[]>()
+  private history: HistoryRecorder
 
-  constructor(readonly room: Party.Room) {}
+  constructor(readonly room: Party.Room) {
+    this.history = new HistoryRecorder(room, () => {
+      const snapshots = []
+      for (const conn of this.room.getConnections<ConnState>()) {
+        const s = conn.state
+        snapshots.push({
+          playerId: conn.id,
+          ip: s?.ip || null,
+          userAgent: s?.userAgent || null,
+        })
+      }
+      return snapshots
+    })
+  }
 
   // Restore persisted state when the room wakes from hibernation.
   // Coerce missing fields to defaults so older snapshots survive engine schema additions.
@@ -57,6 +77,17 @@ export default class GameParty implements Party.Server {
       }
     }
     this.password = (await this.room.storage.get<string>('password')) ?? null
+    await this.history.load()
+  }
+
+  // Apply a command and record it for replay. ip is the source connection's IP
+  // (or null for bot/system commands like NEXT_ROUND auto-fires).
+  private apply(cmd: GameCommand, ip: string | null = null): void {
+    const prev = this.state
+    this.state = applyCommand(this.state, cmd)
+    void this.history.record(cmd, prev, this.state, ip).catch((err) => {
+      console.error('[history] record threw:', err)
+    })
   }
 
   // Fires when 24h have passed with no broadcastState() call. Wipes the room
@@ -70,7 +101,7 @@ export default class GameParty implements Party.Server {
     }
   }
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+  onConnect(conn: Party.Connection<ConnState>, ctx: Party.ConnectionContext) {
     // Per-IP connection rate limit. Empty IP (dev/localhost without proxy headers) is exempt.
     const ip = getClientIp(ctx.request.headers)
     if (ip && this.isRateLimited(ip)) {
@@ -93,13 +124,17 @@ export default class GameParty implements Party.Server {
       return
     }
 
-    this.state = applyCommand(this.state, { type: 'RECONNECT', playerId: conn.id })
+    const userAgent = ctx.request.headers.get('user-agent') ?? ''
+    conn.setState({ ip, userAgent })
+
+    this.apply({ type: 'RECONNECT', playerId: conn.id }, ip || null)
+    void this.history.recordConnect(conn.id, ip || null, userAgent || null)
     // Broadcast (not just send-to-one) so scheduleBotTurnIfNeeded fires —
     // if a human reconnects mid-bot-turn, the bot resumes instead of stalling.
     this.broadcastState()
   }
 
-  onMessage(message: string, sender: Party.Connection) {
+  onMessage(message: string, sender: Party.Connection<ConnState>) {
     let raw: unknown
     try {
       raw = JSON.parse(message)
@@ -125,14 +160,16 @@ export default class GameParty implements Party.Server {
       return
     }
 
+    const ip = sender.state?.ip || null
+
     switch (action.type) {
       case 'JOIN':
-        this.state = applyCommand(this.state, {
+        this.apply({
           type: 'ADD_PLAYER',
           playerId: sender.id,
           playerName: action.playerName,
           isApi: action.client === 'api',
-        })
+        }, ip)
         break
 
       case 'ADD_BOT': {
@@ -140,86 +177,86 @@ export default class GameParty implements Party.Server {
         const usedNames = new Set(this.state.players.map(p => p.name))
         const presets = ['CPU Alice', 'CPU Bob', 'CPU Carol', 'CPU Dave']
         const name = presets.find(n => !usedNames.has(n)) ?? `CPU ${this.state.players.length + 1}`
-        this.state = applyCommand(this.state, {
+        this.apply({
           type: 'ADD_BOT',
           playerId: botId,
           playerName: name,
           difficulty: action.difficulty ?? DEFAULT_BOT_DIFFICULTY,
-        })
+        }, ip)
         break
       }
 
       case 'REMOVE_BOT':
-        this.state = applyCommand(this.state, { type: 'REMOVE_BOT', playerId: action.playerId })
+        this.apply({ type: 'REMOVE_BOT', playerId: action.playerId }, ip)
         break
 
       case 'SET_BOT_DIFFICULTY':
-        this.state = applyCommand(this.state, {
+        this.apply({
           type: 'SET_BOT_DIFFICULTY',
           playerId: action.playerId,
           difficulty: action.difficulty,
-        })
+        }, ip)
         break
 
       case 'START_GAME':
         console.log('[party START_GAME] received options:', action.options)
-        this.state = applyCommand(this.state, { type: 'START_GAME', options: action.options })
+        this.apply({ type: 'START_GAME', options: action.options }, ip)
         console.log('[party START_GAME] applied options:', this.state.options)
         break
 
       case 'READY_FOR_NEXT_ROUND':
-        this.state = applyCommand(this.state, { type: 'READY_FOR_NEXT_ROUND', playerId: sender.id })
+        this.apply({ type: 'READY_FOR_NEXT_ROUND', playerId: sender.id }, ip)
         break
 
       case 'CHECK':
-        this.state = applyCommand(this.state, { type: 'CHECK', playerId: sender.id })
+        this.apply({ type: 'CHECK', playerId: sender.id }, ip)
         break
 
       case 'BET':
-        this.state = applyCommand(this.state, { type: 'BET', playerId: sender.id, amount: action.amount })
+        this.apply({ type: 'BET', playerId: sender.id, amount: action.amount }, ip)
         break
 
       case 'CALL':
-        this.state = applyCommand(this.state, { type: 'CALL', playerId: sender.id })
+        this.apply({ type: 'CALL', playerId: sender.id }, ip)
         break
 
       case 'RAISE':
-        this.state = applyCommand(this.state, { type: 'RAISE', playerId: sender.id, amount: action.amount })
+        this.apply({ type: 'RAISE', playerId: sender.id, amount: action.amount }, ip)
         break
 
       case 'DISCARD':
-        this.state = applyCommand(this.state, {
+        this.apply({
           type: 'DISCARD',
           playerId: sender.id,
           cards: action.cards,
-        })
+        }, ip)
         break
 
       case 'PLAY':
-        this.state = applyCommand(this.state, {
+        this.apply({
           type: 'PLAY',
           playerId: sender.id,
           cards: action.cards,
-        })
+        }, ip)
         break
 
       case 'FOLD':
-        this.state = applyCommand(this.state, { type: 'FOLD', playerId: sender.id })
+        this.apply({ type: 'FOLD', playerId: sender.id }, ip)
         break
 
       case 'LEAVE':
-        this.state = applyCommand(this.state, { type: 'LEAVE', playerId: sender.id })
+        this.apply({ type: 'LEAVE', playerId: sender.id }, ip)
         break
 
       case 'DEBUG_SET_HAND':
         if (process.env.NODE_ENV !== 'production') {
-          this.state = applyCommand(this.state, { type: 'DEBUG_SET_HAND', playerId: sender.id, count: action.count })
+          this.apply({ type: 'DEBUG_SET_HAND', playerId: sender.id, count: action.count }, ip)
         }
         break
 
       case 'DEBUG_ADJUST_CHIPS':
         if (process.env.NODE_ENV !== 'production') {
-          this.state = applyCommand(this.state, { type: 'DEBUG_ADJUST_CHIPS', playerId: sender.id, delta: action.delta })
+          this.apply({ type: 'DEBUG_ADJUST_CHIPS', playerId: sender.id, delta: action.delta }, ip)
         }
         break
 
@@ -233,8 +270,10 @@ export default class GameParty implements Party.Server {
     this.broadcastState()
   }
 
-  onClose(conn: Party.Connection) {
-    this.state = applyCommand(this.state, { type: 'DISCONNECT', playerId: conn.id })
+  onClose(conn: Party.Connection<ConnState>) {
+    const ip = conn.state?.ip || null
+    this.apply({ type: 'DISCONNECT', playerId: conn.id }, ip)
+    void this.history.recordDisconnect(conn.id)
     this.broadcastState()
   }
 
@@ -304,7 +343,7 @@ export default class GameParty implements Party.Server {
     this.botTimer = setTimeout(() => {
       this.botTimer = null
       if (seq !== this.botSeq) return
-      this.state = applyCommand(this.state, { type: 'NEXT_ROUND' })
+      this.apply({ type: 'NEXT_ROUND' })
       this.broadcastState()
     }, BOT_THINK_DELAY_MS * 3)
   }
@@ -321,11 +360,11 @@ export default class GameParty implements Party.Server {
     if (this.state.turnPhase === 'bet') {
       const action = chooseBettingAction(this.state, botId, difficulty)
       switch (action.type) {
-        case 'CHECK': this.state = applyCommand(this.state, { type: 'CHECK', playerId: botId }); break
-        case 'CALL':  this.state = applyCommand(this.state, { type: 'CALL', playerId: botId }); break
-        case 'BET':   this.state = applyCommand(this.state, { type: 'BET', playerId: botId, amount: action.amount }); break
-        case 'RAISE': this.state = applyCommand(this.state, { type: 'RAISE', playerId: botId, amount: action.amount }); break
-        case 'FOLD':  this.state = applyCommand(this.state, { type: 'FOLD', playerId: botId }); break
+        case 'CHECK': this.apply({ type: 'CHECK', playerId: botId }); break
+        case 'CALL':  this.apply({ type: 'CALL', playerId: botId }); break
+        case 'BET':   this.apply({ type: 'BET', playerId: botId, amount: action.amount }); break
+        case 'RAISE': this.apply({ type: 'RAISE', playerId: botId, amount: action.amount }); break
+        case 'FOLD':  this.apply({ type: 'FOLD', playerId: botId }); break
       }
       this.broadcastState()
       return
@@ -334,11 +373,11 @@ export default class GameParty implements Party.Server {
     const decision = chooseBotMove(this.state, botId, presetForDifficulty(difficulty))
 
     // DISCARD then PLAY/FOLD — the state machine validates each step.
-    this.state = applyCommand(this.state, { type: 'DISCARD', playerId: botId, cards: decision.discard })
+    this.apply({ type: 'DISCARD', playerId: botId, cards: decision.discard })
     if (decision.action.type === 'PLAY') {
-      this.state = applyCommand(this.state, { type: 'PLAY', playerId: botId, cards: decision.action.cards })
+      this.apply({ type: 'PLAY', playerId: botId, cards: decision.action.cards })
     } else {
-      this.state = applyCommand(this.state, { type: 'FOLD', playerId: botId })
+      this.apply({ type: 'FOLD', playerId: botId })
     }
 
     this.broadcastState()

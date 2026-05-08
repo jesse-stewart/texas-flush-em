@@ -144,6 +144,7 @@ export interface ClientGameState {
   gameWinnerId: string | null
   scores: Record<string, number>
   roundScoreDelta: Record<string, number>
+  roundStartScores: Record<string, number>
   middlePileCount: number
   options: GameOptions
   events: GameEvent[]
@@ -179,6 +180,7 @@ export function buildClientState(state: GameState, forPlayerId: string): ClientG
     gameWinnerId: state.gameWinnerId,
     scores: state.scores,
     roundScoreDelta: state.roundScoreDelta,
+    roundStartScores: state.roundStartScores ?? {},
     abandonedByName: state.abandonedByName,
     middlePileCount: state.middlePile.length,
     options: state.options,
@@ -219,6 +221,7 @@ export function initialState(): GameState {
     gameWinnerId: null,
     scores: {},
     roundScoreDelta: {},
+    roundStartScores: {},
     deckCount: 1,
     options: { ...DEFAULT_OPTIONS },
     abandonedByName: null,
@@ -893,6 +896,7 @@ function applyStartGame(state: GameState, cmd: { options?: Partial<GameOptions> 
       roundWinnerId: null,
       scores,
       roundScoreDelta: {},
+      roundStartScores: { ...scores },
       deckCount: effectiveDeckCount(options, players.length),
       options,
       nextRoundReady: {},
@@ -968,6 +972,7 @@ function applyNextRound(state: GameState): GameState {
       minRaise: 0,
       bettingActedSinceRaise: [],
       roundWinnerId: null,
+      roundStartScores: { ...state.scores },
       // Personal mode's effective deck count tracks playerCount, which can shrink after eliminations.
       deckCount: effectiveDeckCount(state.options, activePlayers.length),
       nextRoundReady: {},

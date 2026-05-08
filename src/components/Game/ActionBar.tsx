@@ -97,13 +97,13 @@ export function ActionBar({ state, myPlayerId, selected, onDiscard, onPlay, onFo
         {hint}
       </span>
       <div style={{ display: 'flex', gap: 6 }}>
-        <Button onClick={onPlay} disabled={!canPlay} primary style={{ minWidth: 80 }}>
+        <Button onClick={onPlay} disabled={!canPlay} style={{ minWidth: 80 }}>
           Play
         </Button>
         <Button onClick={onDiscard} disabled={!canDiscard} style={{ minWidth: 90 }}>
           Discard {selected.length > 0 ? selected.length : ''}
         </Button>
-        <Button onClick={onFold} disabled={!canFold} style={{ minWidth: 80 }}>
+        <Button onClick={onFold} disabled={!canFold} className="r95-red" style={{ minWidth: 80, background: palette.lose, color: palette.white }}>
           Fold
         </Button>
       </div>
@@ -292,7 +292,7 @@ function BettingActionBar({ state, myPlayerId, isMyTurn, onCheck, onCall, onBet,
           </>
         )}
 
-        <Button onClick={onFold} disabled={!isMyTurn} style={STATIC_FOLD}>Fold</Button>
+        <Button onClick={onFold} disabled={!isMyTurn} className="r95-red" style={{ ...STATIC_FOLD, background: palette.lose, color: palette.white }}>Fold</Button>
       </div>
     </Frame>
   )

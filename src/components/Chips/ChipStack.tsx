@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { palette } from '../../palette'
 import { Chip, type ChipSize } from './Chip'
 
@@ -48,31 +49,42 @@ export function breakIntoChips(count: number): Record<Denom, number> {
   return result
 }
 
-// Stable pseudo-random variant per (denom, position).
-function variantFor(denom: number, index: number): 0 | 1 {
-  const h = (denom * 73856093) ^ (index * 19349663)
-  return ((h >>> 0) & 1) as 0 | 1
+interface Jitter {
+  dx: number[]
+  dy: number[]
+  variant: (0 | 1)[]
 }
 
-// Hand-stacked chips lean. 50% the chip rests dead-on the one below it; 50%
-// it picks a fresh offset in [-3, +3]. First chip is dead center.
-function nextDx(denom: number, index: number, prev: number): number {
-  const h = ((denom * 2654435761) ^ (index * 40503) ^ 0xa5a5a5a5) >>> 0
-  if ((h & 1) === 0) return prev
-  return ((h >>> 1) % 7) - 3
+// One random jitter table per stack instance. Computed once on mount so the
+// pattern stays stable across rerenders, but every ChipStack rolls its own.
+function useJitter(slots: number): Jitter {
+  const ref = useRef<Jitter | null>(null)
+  if (ref.current == null) {
+    const dx: number[] = []
+    const dy: number[] = []
+    const variant: (0 | 1)[] = []
+    for (let i = 0; i < slots; i++) {
+      dx.push(Math.floor(Math.random() * 3) - 1)
+      dy.push(Math.floor(Math.random() * 3) - 1)
+      variant.push(Math.random() < 0.5 ? 0 : 1)
+    }
+    ref.current = { dx, dy, variant }
+  }
+  return ref.current
 }
 
 // Compact mini-chip row — one 18×18 chip per denomination present in the
 // breakdown of `count`. Used in score callouts where a full ChipStack would
 // be too tall.
 export function MiniChipRow({ count }: { count: number }) {
+  const jitter = useJitter(FILL_ORDER.length)
   if (count <= 0) return null
   const breakdown = breakIntoChips(count)
   const present = FILL_ORDER.filter(d => breakdown[d] > 0)
   return (
     <span style={{ display: 'inline-flex', gap: 1, alignItems: 'center' }}>
       {present.map((d, i) => (
-        <Chip key={d} denom={d} size={18} variant={variantFor(d, i)} />
+        <Chip key={d} denom={d} size={18} variant={jitter.variant[i]} />
       ))}
     </span>
   )
@@ -189,17 +201,10 @@ function SingleStack({
   zIndex: number
   stagger: boolean
 }) {
+  const jitter = useJitter(MAX_VISIBLE)
   const visible = Math.min(count, MAX_VISIBLE)
   const overflow = count - visible
   const stackHeight = (visible - 1) * slice + size
-
-  const dxs: number[] = []
-  let prev = 0
-  for (let i = 0; i < visible; i++) {
-    const dx = !stagger || i === 0 ? 0 : nextDx(denom, i, prev)
-    dxs.push(dx)
-    prev = dx
-  }
 
   return (
     <span
@@ -218,8 +223,12 @@ function SingleStack({
           key={i}
           denom={denom}
           size={size}
-          variant={variantFor(denom, i)}
-          style={{ position: 'absolute', left: dxs[i], bottom: i * slice }}
+          variant={jitter.variant[i]}
+          style={{
+            position: 'absolute',
+            left: stagger ? jitter.dx[i] : 0,
+            bottom: i * slice + (stagger ? jitter.dy[i] : 0),
+          }}
         />
       ))}
       {overflow > 0 && (

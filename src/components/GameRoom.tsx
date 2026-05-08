@@ -212,9 +212,17 @@ function RoundEndModal({
   myPlayerId: string
   onNext: () => void
 }) {
-  const isWinner = state.roundWinnerId === myPlayerId
   const winner = state.players.find(p => p.id === state.roundWinnerId)
-  const myDelta = state.roundScoreDelta[myPlayerId] ?? 0
+  const breakdown = roundBreakdown(state, myPlayerId)
+  const isChips = state.options.scoringMode === 'chips'
+  const totalSign = breakdown.total >= 0 ? '+' : '-'
+  const totalAbs = Math.abs(breakdown.total)
+  const totalText = isChips
+    ? (breakdown.total === 0 ? '$0' : `${totalSign}$${totalAbs}`)
+    : (breakdown.total > 0 ? `+${breakdown.total}` : '0')
+  const totalColor = isChips
+    ? (breakdown.total > 0 ? palette.win : breakdown.total < 0 ? palette.lose : palette.dkGray)
+    : (breakdown.total > 0 ? palette.lose : palette.dkGray)
 
   return (
     <div style={{
@@ -228,9 +236,15 @@ function RoundEndModal({
           <div style={{ fontSize: 16, fontWeight: 700 }}>
             {winner?.name ?? 'Someone'} wins the round!
           </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: isWinner ? palette.win : palette.lose }}>
-            {isWinner ? 'No chips lost' : `-$${Math.abs(myDelta)}`}
+          <div style={{ fontSize: 13, fontWeight: 700, color: totalColor }}>
+            {totalText}
           </div>
+          {breakdown.showSplit && (
+            <div style={{ fontSize: 11, color: palette.vdkGray, display: 'flex', gap: 8 }}>
+              <span>betting: {formatChipDelta(breakdown.betting)}</span>
+              <span>cards: {formatChipDelta(breakdown.cards)}</span>
+            </div>
+          )}
           <Button onClick={onNext} style={{ marginTop: 8, minWidth: 120 }}>
             See scores
           </Button>
@@ -238,6 +252,37 @@ function RoundEndModal({
       </Frame>
     </div>
   )
+}
+
+// Per-player round breakdown derived from current scores, the start-of-round snapshot,
+// and the card-only delta. bettingDelta = total - cardDelta. Falls back gracefully when
+// roundStartScores wasn't captured (older persisted state).
+function roundBreakdown(state: ClientGameState, playerId: string): {
+  before: number
+  total: number
+  betting: number
+  cards: number
+  showSplit: boolean
+} {
+  const cards = state.roundScoreDelta[playerId] ?? 0
+  const current = state.scores[playerId] ?? 0
+  const startSnap = state.roundStartScores?.[playerId]
+  const before = startSnap ?? (current - cards)
+  const total = current - before
+  const betting = total - cards
+  const bettingEnabled = state.options.scoringMode === 'chips' && state.options.anteAmount > 0
+  return { before, total, betting, cards, showSplit: bettingEnabled && (betting !== 0 || cards !== 0) }
+}
+
+function formatChipDelta(amount: number): string {
+  if (amount === 0) return '$0'
+  return amount > 0 ? `+$${amount}` : `-$${Math.abs(amount)}`
+}
+
+function chipDeltaColor(amount: number): string {
+  if (amount > 0) return palette.win
+  if (amount < 0) return palette.lose
+  return palette.dkGray
 }
 
 function GameEndScreen({ state, myPlayerId, onLeave }: { state: ClientGameState; myPlayerId: string; onLeave: () => void }) {
@@ -314,6 +359,7 @@ function RoundEndScreen({
   const winner = state.players.find(p => p.id === state.roundWinnerId)
   const isChips = state.options.scoringMode === 'chips'
   const totalLabel = isChips ? 'chips' : 'points'
+  const showBettingColumn = isChips && state.options.anteAmount > 0
 
   const requiredReady = state.players.filter(p => !p.isBot && !p.eliminated && p.isConnected)
   const waitingFor = requiredReady.filter(p => !state.nextRoundReady[p.id])
@@ -330,7 +376,7 @@ function RoundEndScreen({
 
   return (
     <div style={pageStyle}>
-      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: 520, maxWidth: '100%' }}>
+      <Frame bgColor="$material" boxShadow="$out" p="$2" style={{ width: showBettingColumn ? 720 : 520, maxWidth: '100%' }}>
         <TitleBar title="Round complete" active />
         <div style={{ padding: 12 }}>
           <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, textAlign: 'center' }}>
@@ -343,26 +389,33 @@ function RoundEndScreen({
                 <TableRow>
                   <TableHeadCell style={{ textAlign: 'left', fontWeight: 'normal' }}>player</TableHeadCell>
                   <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>before</TableHeadCell>
-                  <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>this round</TableHeadCell>
+                  {showBettingColumn ? (
+                    <>
+                      <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>betting</TableHeadCell>
+                      <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>cards</TableHeadCell>
+                    </>
+                  ) : (
+                    <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>this round</TableHeadCell>
+                  )}
                   <TableHeadCell style={{ textAlign: 'right', fontWeight: 'normal' }}>{totalLabel}</TableHeadCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {sorted.map(p => {
-                  const delta = state.roundScoreDelta[p.id] ?? 0
+                  const { before, total: totalDelta, betting, cards } = roundBreakdown(state, p.id)
                   const total = state.scores[p.id] ?? 0
-                  const before = isChips ? total - delta : total - delta
                   const isRoundWinner = p.id === state.roundWinnerId
-                  let deltaText = '-'
-                  let deltaColor: string = palette.dkGray
-                  if (isChips) {
-                    if (delta > 0) { deltaText = `+$${delta}`; deltaColor = palette.win }
-                    else if (delta < 0) { deltaText = `-$${Math.abs(delta)}`; deltaColor = palette.lose }
-                  } else {
-                    if (!isRoundWinner && delta > 0) { deltaText = `+${delta}`; deltaColor = palette.lose }
-                  }
                   const isRequired = !p.isBot && !p.eliminated && p.isConnected
                   const ready = !!state.nextRoundReady[p.id]
+                  // Single-column "this round" rendering for non-betting modes.
+                  let comboText = '-'
+                  let comboColor: string = palette.dkGray
+                  if (isChips) {
+                    if (totalDelta > 0) { comboText = `+$${totalDelta}`; comboColor = palette.win }
+                    else if (totalDelta < 0) { comboText = `-$${Math.abs(totalDelta)}`; comboColor = palette.lose }
+                  } else {
+                    if (!isRoundWinner && cards > 0) { comboText = `+${cards}`; comboColor = palette.lose }
+                  }
                   return (
                     <TableRow key={p.id} style={{ opacity: p.eliminated ? 0.5 : 1 }}>
                       <TableDataCell>
@@ -375,16 +428,32 @@ function RoundEndScreen({
                         )}
                       </TableDataCell>
                       <TableDataCell style={{ textAlign: 'right', color: palette.dkGray }}>{isChips ? `$${before}` : before}</TableDataCell>
-                      <TableDataCell style={{ textAlign: 'right', color: deltaColor }}>
-                        <span style={{ position: 'relative', display: 'inline-block' }}>
-                          {isChips && isRoundWinner && delta > 0 && (
-                            <span style={{ position: 'absolute', right: '100%', bottom: -4, marginRight: 4 }}>
-                              <ChipStack count={delta} size={18} />
+                      {showBettingColumn ? (
+                        <>
+                          <TableDataCell style={{ textAlign: 'right', color: chipDeltaColor(betting), paddingLeft: 56 }}>
+                            <span style={{ position: 'relative', display: 'inline-block' }}>
+                              {betting > 0 && (
+                                <span style={{ position: 'absolute', right: '100%', bottom: -4, marginRight: 10 }}>
+                                  <ChipStack count={betting} size={18} />
+                                </span>
+                              )}
+                              {formatChipDelta(betting)}
                             </span>
-                          )}
-                          {deltaText}
-                        </span>
-                      </TableDataCell>
+                          </TableDataCell>
+                          <TableDataCell style={{ textAlign: 'right', color: chipDeltaColor(cards), paddingLeft: 56 }}>
+                            <span style={{ position: 'relative', display: 'inline-block' }}>
+                              {cards > 0 && (
+                                <span style={{ position: 'absolute', right: '100%', bottom: -4, marginRight: 10 }}>
+                                  <ChipStack count={cards} size={18} />
+                                </span>
+                              )}
+                              {formatChipDelta(cards)}
+                            </span>
+                          </TableDataCell>
+                        </>
+                      ) : (
+                        <TableDataCell style={{ textAlign: 'right', color: comboColor }}>{comboText}</TableDataCell>
+                      )}
                       <TableDataCell style={{ textAlign: 'right' }}>{isChips ? `$${total}` : total}</TableDataCell>
                     </TableRow>
                   )

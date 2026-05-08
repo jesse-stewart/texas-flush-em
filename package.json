@@ -22,6 +22,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@react95/core": "^9.7.3",
     "@react95/icons": "^2.4.1",
+    "@supabase/supabase-js": "^2.105.3",
     "framer-motion": "^12.38.0",
     "partysocket": "^1.0.2",
     "react": "^18.3.1",

@@ -26,3 +26,25 @@ button.r95-pressed:focus {
   outline: var(--r95-space-1) dotted var(--r95-color-borderDarkest);
   outline-offset: calc(var(--r95-space-5) * -1);
 }
+
+/* Red-tinted Win95 bevel for the Fold button. Default react95 buttons render
+   their bevel via :before with both 2px borders (theme greys) AND box-shadow.
+   Override both with red tones so the highlights/shadows match the red bg. */
+button.r95-red:before {
+  border-left-color:   #ff6666 !important;
+  border-top-color:    #ff6666 !important;
+  border-right-color:  #1a0000 !important;
+  border-bottom-color: #1a0000 !important;
+  box-shadow:
+    inset 1px 1px 0 1px #cc3333,
+    inset -1px -1px 0 1px #660000 !important;
+}
+button.r95-red:active:before {
+  border-left-color:   #1a0000 !important;
+  border-top-color:    #1a0000 !important;
+  border-right-color:  #ff6666 !important;
+  border-bottom-color: #ff6666 !important;
+  box-shadow:
+    inset 1px 1px 0 1px #660000,
+    inset -1px -1px 0 1px #cc3333 !important;
+}
